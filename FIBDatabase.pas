@@ -45,6 +45,7 @@ uses
  {$IFDEF DIRECT_USE_DB_LOGIN_FORM}
    ,FIBDBLoginDlg      //IS GUI
  {$ENDIF}
+ , FbClasses, Fb25Classes
   ;
 
 
@@ -106,6 +107,7 @@ type
     FLibraryName64        :string;
     FDoChangeScreenCursor: TDoChangeScreenCursor  ;
    {$ENDIF}
+    FProvider: TFbProvider;
 
     function GetMemoSubtypes :string;
     procedure SetMemoSubtypes(const Value:string);
@@ -125,7 +127,6 @@ type
 
     function GetBusy: boolean;
   protected
-    FClientLibrary      :IIBClientLibrary;
     FFIBBases            : TList;                        // TFIBBases attached.
     FTransactions       : TList;                        // TFIBTransactions attached.
     FDBName             : Ansistring;                       // DB's name
@@ -282,11 +283,14 @@ type
     FServerBuild:integer;
     FNeedUTFDecodeDDL:boolean;
     FIsFB21OrMore :boolean;
+    FUseLegacyApi: Boolean;
     procedure FillServerVersions;
     function GetServerMajorVersion: integer;
     function GetServerMinorVersion: integer;
     function GetServerRelease: integer;
     function GetServerBuild: integer;
+    procedure SetUseLegacyApi(const Value: Boolean);
+    function GetClientLibrary: IIbClientLibrary;
   protected
     function GetInternalTransaction:TFIBTransaction; // friend for pFIBDataInfo
     property StreammedConnectFail:boolean read FStreammedConnectFail;
@@ -525,7 +529,7 @@ type
 
     function EasyFormatsStr :boolean;
     property StoreConnected :boolean read GetStoreConnected;
-    property ClientLibrary:IIbClientLibrary read FClientLibrary implements IIbClientLibrary;
+    property ClientLibrary:IIbClientLibrary read GetClientLibrary implements IIbClientLibrary;
     property SQLStatisticsMaker:ISQLStatMaker read FSQLStatMaker write SetSQLStatMaker;
 
   published
@@ -582,6 +586,7 @@ type
     {$ENDIF}
   published
     property MemoSubtypes: string read GetMemoSubtypes write SetMemoSubtypes;
+    property UseLegacyApi: Boolean read FUseLegacyApi write SetUseLegacyApi;
   end;
 
   (* TFIBTransaction *)
@@ -827,7 +832,8 @@ uses
 {$IFDEF D_XE3}
   System.Types, // for inline funcs
 {$ENDIF}
-  FIBMiscellaneous,pFIBDataInfo,FIBQuery, StrUtil,pFIBCacheQueries, FIBConsts;
+  FIBMiscellaneous,pFIBDataInfo,FIBQuery, StrUtil,pFIBCacheQueries, FIBConsts,
+  FbClientApi;
 
 
 var
@@ -950,7 +956,6 @@ constructor TFIBDatabase.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FLibraryName  := IBASE_DLL;
-  FClientLibrary:= nil;
   FFIBBases                            := TList.Create;
   FTransactions                        := TList.Create;
   FDBName                              := '';
@@ -1079,7 +1084,7 @@ begin
    FBlobSwapSupport.Free;
    FGenerators.Free;
    FMemoSubtypes.Free;
-   FClientLibrary:=nil;
+   FreeAndNil(FProvider);
    inherited Destroy;
 end;
 
@@ -1090,8 +1095,7 @@ begin
   if FLibraryName<>LibName then
   begin
     FLibraryName  :=LibName;
-    FClientLibrary:=nil;
-    FClientLibLoaded := False;
+    FreeAndNil(FProvider);
 {    if Length(FLibraryName)>0 then
      LoadLibrary}
   end;
@@ -1141,8 +1145,8 @@ end;
 
 function TFIBDatabase.LibraryFilePath:string;
 begin
-  if Assigned(FClientLibrary) then
-   Result:=FClientLibrary.LibraryFilePath
+  if Assigned(FProvider) then
+   Result:=FProvider.LibraryFilePath
   else
    Result:=FLibraryName
 end;
@@ -1419,7 +1423,7 @@ begin
   LoadLibrary;
   tr_handle := nil;
   Call(
-    FClientLibrary.isc_dsql_execute_immediate(StatusVector, @FHandle, @tr_handle, 0,
+    ClientLibrary.isc_dsql_execute_immediate(StatusVector, @FHandle, @tr_handle, 0,
      PAnsiChar('CREATE DATABASE ''' + FDBName + ''' ' +AnsiString(DBParams.Text)
     ), SQLDialect, nil),
     True
@@ -1456,7 +1460,7 @@ procedure TFIBDatabase.DropDatabase;
 begin
   CheckActive;
   LoadLibrary;
-  Call(FClientLibrary.isc_drop_database(StatusVector, @FHandle), True);
+  Call(ClientLibrary.isc_drop_database(StatusVector, @FHandle), True);
   FHandle:=nil
 end;
 
@@ -1480,6 +1484,11 @@ end;
 procedure TFIBDatabase.ForceClose;
 begin
   InternalClose(True);
+end;
+
+function TFIBDatabase.GetClientLibrary: IIbClientLibrary;
+begin
+  Result := (FProvider as TFb25Provider).ClientLibrary;
 end;
 
 function TFIBDatabase.GetConnected: Boolean;
@@ -1636,7 +1645,7 @@ begin
 
     try
       if (not HandleIsShared) and
-         (Call(FClientLibrary.isc_detach_database(StatusVector, @FHandle), not Force) > 0) and
+         (Call(ClientLibrary.isc_detach_database(StatusVector, @FHandle), not Force) > 0) and
          (not Force)
       then
         IbError(Self,Self)
@@ -1889,7 +1898,7 @@ begin
       * the statement doesn't execute correctly.
       *)
      SV:=StatusVector;
-     isc_res:=Call(FClientLibrary.isc_attach_database(SV, Length(FDBName),
+     isc_res:=Call(ClientLibrary.isc_attach_database(SV, Length(FDBName),
                             PAnsiChar(FDBName), @FHandle,
                             FDPBLength, FDPB), False);
   finally
@@ -2010,8 +2019,7 @@ begin
 end;
 
 procedure TFIBDatabase.LoadLibrary;
-var
-  XLibraryName: Ansistring;
+
 begin
    {$IFDEF D_XE2}
        {$IFDEF WIN64}
@@ -2019,14 +2027,8 @@ begin
           FLibraryName:=FLibraryName64;
        {$ENDIF}
    {$ENDIF}
-   if not FClientLibLoaded then
-   begin
-    XLibraryName:=FLibraryName;
-    FClientLibrary:=IB_Intf.GetClientLibrary(XLibraryName);
-    FClientLibLoaded:=Assigned(FClientLibrary);
-   end;
-   if not FClientLibrary.LibraryLoaded then
-    FClientLibrary.LoadIBLibrary
+
+   FProvider := TFbClientApi.GetProvider(FLibraryName, UseLegacyApi);
 end;
 
 procedure TFIBDatabase.SetConnected(Value: Boolean);
@@ -2147,6 +2149,17 @@ begin
   end;
 end;
 
+procedure TFIBDatabase.SetUseLegacyApi(const Value: Boolean);
+begin
+  if (FUseLegacyApi <> Value) then
+  begin
+    if Connected  then
+      raise Exception.Create('Cannot change UseLegacyApi while Connected');
+
+    FUseLegacyApi := Value;
+  end;
+end;
+
 procedure TFIBDatabase.SetHandle(Value: TISC_DB_HANDLE);
 begin
   if HandleIsShared then
@@ -2198,7 +2211,7 @@ begin
  LoadLibrary;
  GetMem(p,100);
  try
-  FClientLibrary.isc_get_client_version(p);
+  ClientLibrary.isc_get_client_version(p);
   Result:=p;
  finally
   FreeMem(p,100)
@@ -2208,13 +2221,13 @@ end;
 function  TFIBDatabase.ClientMajorVersion:integer;
 begin
   LoadLibrary;
-  Result:=FClientLibrary.ClientVersion
+  Result:=ClientLibrary.ClientVersion
 end;
 
 function  TFIBDatabase.ClientMinorVersion:integer;
 begin
   LoadLibrary;
-  Result:=FClientLibrary.ClientMinorVersion
+  Result:=ClientLibrary.ClientMinorVersion
 end;
 
 function  TFIBDatabase.GetIsFirebirdConnect :boolean;
@@ -2340,13 +2353,13 @@ end;
 procedure TFIBDatabase.EnableCancelOperations;
 begin
  CheckActive;
- Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_enable),True);
+ Call(ClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_enable),True);
 end;
 
 procedure TFIBDatabase.DisableCancelOperations;
 begin
  CheckActive;
- Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_disable),True);
+ Call(ClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_disable),True);
 end;
 
 function  TFIBDatabase.CanCancelOperationFB21:boolean;
@@ -2390,7 +2403,7 @@ procedure TFIBDatabase.RaiseCancelOperations;
 begin
  CheckActive;
  if Busy then
-  Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_raise),True);
+  Call(ClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_raise),True);
 end;
 
 
@@ -2451,7 +2464,7 @@ begin
   DBInfoCommand := AnsiChar(isc_info_base_level);
   Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                          FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  Result := ClientLibrary.isc_vax_integer(@local_buffer[4], 1);
 end;
 
 function TFIBDatabase.GetDBFileName: Ansistring;
@@ -2463,7 +2476,7 @@ begin
   begin
     CheckActive;
     DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+    Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                            FIBLocalBufferLength, local_buffer), True);
     local_buffer[5 + Int(local_buffer[4])] := #0;
     Result := PAnsiChar(@local_buffer[5]);
@@ -2481,7 +2494,7 @@ var
 begin
   CheckActive;
   DBInfoCommand := AnsiChar(isc_info_db_id);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer), True);
   p := @local_buffer[5 + Int(local_buffer[4])]; // DBSiteName Length
   p := p + Int(p^) + 1;                         // End of DBSiteName
@@ -2498,7 +2511,7 @@ begin
   if FConnectType=0 then
   begin
     DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+    Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                           FIBLocalBufferLength, local_buffer), True);
     FConnectType:=Int(local_buffer[3]);
   end;
@@ -2518,14 +2531,14 @@ begin
   FActiveTransactions.Clear;
 
   DBInfoCommand := AnsiChar(frb_info_active_transactions);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer), True);
   i:=0;
 
   while local_buffer[i] = AnsiChar(frb_info_active_transactions) do
   begin
     Inc(i,3);
-    L      :=FClientLibrary.isc_vax_integer(@local_buffer[i], 4);
+    L      :=ClientLibrary.isc_vax_integer(@local_buffer[i], 4);
     Result .Add(IntToStr(L));
     Inc(i,4);
   end;
@@ -2538,7 +2551,7 @@ var
 begin
   CheckActive;
   DBInfoCommand := AnsiChar(frb_info_firebird_version);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer), True);
   if DBInfoCommand=local_buffer[0] then
   begin
@@ -2639,9 +2652,9 @@ var
 begin
   CheckActive;
   DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[3], 1);
+  Result := ClientLibrary.isc_vax_integer(@local_buffer[3], 1);
 end;
 
 function TFIBDatabase.GetOldestTransaction: Long;
@@ -2672,9 +2685,9 @@ var
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                          FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  Result := ClientLibrary.isc_vax_integer(@local_buffer[4], 1);
 end;
 
 function TFIBDatabase.GetNoReserve: Long;
@@ -2704,7 +2717,7 @@ var
 begin
   DBInfoCommand := AnsiChar(isc_info_version);
 
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBBigLocalBufferLength, local_buffer), True);
   local_buffer[5 + Int(local_buffer[4])] := #0;
   Result := PAnsiChar(@local_buffer[5]);
@@ -2745,7 +2758,7 @@ begin
   if FUserNames = nil then FUserNames := TStringList.Create;
   Result := FUserNames;
   DBInfoCommand := AnsiChar(isc_info_user_names);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBHugeLocalBufferLength, local_buffer), True);
   FUserNames.Clear;
   i := 0;
@@ -2796,7 +2809,7 @@ begin
   if FOperation = nil then FOperation := TStringList.Create;
   Result := FOperation;
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBHugeLocalBufferLength, local_buffer), True);
   FOperation.Clear;
   // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
@@ -2806,11 +2819,11 @@ begin
   // Each pair consists of:
   // 1. 2 bytes specifying the table ID.
   // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-  qtd_tables := trunc(FClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
+  qtd_tables := trunc(ClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
   for i := 0 to qtd_tables - 1 do
   begin
-    id_table := FClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
-    qtd_operations := FClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
+    id_table := ClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
+    qtd_operations := ClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
     FOperation.Add(IntToStr(id_table)+'='+IntToStr(qtd_operations));
   end;
 end;
@@ -2826,7 +2839,7 @@ begin
   for j:=isc_info_insert_count to isc_info_delete_count do
   begin
     _DBInfoCommand:=AnsiChar(j);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
+    Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
                            FIBHugeLocalBufferLength, local_buffer), True);
     // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
     // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
@@ -2835,10 +2848,10 @@ begin
     // Each pair consists of:
     // 1. 2 bytes specifying the table ID.
     // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-    qtd_tables := trunc(FClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
+    qtd_tables := trunc(ClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
     for i := 0 to qtd_tables - 1 do
     begin
-      Inc(Result,FClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4));
+      Inc(Result,ClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4));
     end;
   end;
 end;
@@ -3014,11 +3027,11 @@ var
   _DBInfoCommand: AnsiChar;
 begin
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBLocalBufferLength, local_buffer), True);
   Success:=local_buffer[0] = _DBInfoCommand;
-  length := FClientLibrary.isc_vax_integer(@local_buffer[1], 2);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[3], length);
+  length := ClientLibrary.isc_vax_integer(@local_buffer[1], 2);
+  Result := ClientLibrary.isc_vax_integer(@local_buffer[3], length);
 
 end;
 
@@ -3034,7 +3047,7 @@ var
   _DBInfoCommand: AnsiChar;
 begin
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
+  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBBigLocalBufferLength, local_buffer), True);
   local_buffer[4 + Int(local_buffer[3])] := #0;
   Result := PAnsiChar(@local_buffer[4]);
@@ -3344,8 +3357,8 @@ end;
 
 function TFIBDatabase.GetBusy: boolean;
 begin
- if Assigned(FClientLibrary) then
-  Result:=FClientLibrary.Busy
+ if Assigned(ClientLibrary) then
+  Result:=ClientLibrary.Busy
  else
   Result:=False
 end;
@@ -4375,7 +4388,6 @@ begin
   FDatabase := Value;
   if (FDatabase <> nil) then
   begin
-//    FClientLibrary:=FDatabase.ClientLibrary;
     FIndexInDatabase := FDatabase.AddFIBBase(Self);
     if (FTransaction = nil)
      and Assigned(Owner) and not CmpInLoadedState(TComponent(Owner))

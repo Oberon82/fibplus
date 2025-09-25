@@ -36,13 +36,13 @@ requires
 contains
   StdFuncs in '..\StdFuncs.pas',
   IB_Services in '..\IB_Services.pas',
-  ibase in '..\ibase.pas',
+  ibase in '..\Interfaces\Fb25\ibase.pas',
   FIBDatabase in '..\FIBDatabase.pas',
-  IB_Install in '..\IB_Install.pas',
+  IB_Install in '..\Interfaces\Fb25\IB_Install.pas',
   pFIBDatabase in '..\pFIBDatabase.pas',
   FIBPlatforms in '..\FIBPlatforms.pas',
-  IB_Intf in '..\IB_Intf.pas',
-  IB_InstallHeader in '..\IB_InstallHeader.pas',
+  IB_Intf in '..\Interfaces\Fb25\IB_Intf.pas',
+  IB_InstallHeader in '..\Interfaces\Fb25\IB_InstallHeader.pas',
   FIBSafeTimer in '..\FIBSafeTimer.pas',
   IBBlobFilter in '..\IBBlobFilter.pas',
   IB_Externals in '..\IB_Externals.pas',
@@ -83,7 +83,12 @@ contains
   pFIBFieldsDescr in '..\pFIBFieldsDescr.pas',
   SIBAPI in '..\SIBAPI.pas',
   SIBFIBEA in '..\SIBFIBEA.PAS',
-  SIBGlobals in '..\SIBGlobals.pas';
+  SIBGlobals in '..\SIBGlobals.pas',
+  FbClasses in '..\Interfaces\FbClasses.pas',
+  FbClientApi in '..\Interfaces\FbClientApi.pas',
+  Fb30Classes in '..\Interfaces\Fb30\Fb30Classes.pas',
+  Fb25Classes in '..\Interfaces\Fb25\Fb25Classes.pas',
+  Firebird in '..\Interfaces\Fb30\Firebird.pas';
 
 end.
 

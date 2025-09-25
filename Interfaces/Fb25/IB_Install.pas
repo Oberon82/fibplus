@@ -22,7 +22,7 @@
 unit IB_Install;
 
 interface
-{$I FIBPlus.inc}
+{$I ..\..\FIBPlus.inc}
 uses
    TypInfo, SysUtils, Classes, IB_InstallHeader, IB_Intf;
 

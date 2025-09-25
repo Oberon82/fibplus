@@ -25,7 +25,7 @@ interface
 
 uses
   IB_Externals, FIBPlatforms;
-{$I FIBPlus.inc}
+{$I ..\..\FIBPlus.inc}
 
 const
   ISC_TRUE   = 1;
