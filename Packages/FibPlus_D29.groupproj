@@ -12,6 +12,9 @@
         <Projects Include="FIBPlusEditors_D29.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="..\Tests\FibTests.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -47,14 +50,23 @@
     <Target Name="FIBPlusEditors_D29:Make">
         <MSBuild Projects="FIBPlusEditors_D29.dproj" Targets="Make"/>
     </Target>
+    <Target Name="FibTests">
+        <MSBuild Projects="..\Tests\FibTests.dproj"/>
+    </Target>
+    <Target Name="FibTests:Clean">
+        <MSBuild Projects="..\Tests\FibTests.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="FibTests:Make">
+        <MSBuild Projects="..\Tests\FibTests.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="FIBPlus_D29;DclFIBPlus_D29;FIBPlusEditors_D29"/>
+        <CallTarget Targets="FIBPlus_D29;DclFIBPlus_D29;FIBPlusEditors_D29;FibTests"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="FIBPlus_D29:Clean;DclFIBPlus_D29:Clean;FIBPlusEditors_D29:Clean"/>
+        <CallTarget Targets="FIBPlus_D29:Clean;DclFIBPlus_D29:Clean;FIBPlusEditors_D29:Clean;FibTests:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="FIBPlus_D29:Make;DclFIBPlus_D29:Make;FIBPlusEditors_D29:Make"/>
+        <CallTarget Targets="FIBPlus_D29:Make;DclFIBPlus_D29:Make;FIBPlusEditors_D29:Make;FibTests:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>
