@@ -32,7 +32,10 @@ type
     procedure Test04StartAndCommitTransation;
 
     [Test]
-    procedure Test05ReadData;
+    procedure Test05ReadAndWriteData;
+
+    [Test]
+    procedure TestDbInfo();
     //[Test]
     procedure Test01CreateAndDropDatabaseNewApi;
   end;
@@ -150,7 +153,7 @@ begin
   Assert.IsFalse(FFibDatabase.Connected);
 end;
 
-procedure TFibDatabaseTests.Test05ReadData;
+procedure TFibDatabaseTests.Test05ReadAndWriteData;
 begin
   FFibDatabase.ConnectParams.UserName := 'sysdba';
   FFibDatabase.ConnectParams.Password := 'masterkey';
@@ -195,6 +198,87 @@ begin
 
   FFibDatabase.Close;
   Assert.IsFalse(FFibDatabase.Connected);
+end;
+
+procedure TFibDatabaseTests.TestDbInfo;
+begin
+  FFibDatabase.ConnectParams.UserName := 'sysdba';
+  FFibDatabase.ConnectParams.Password := 'masterkey';
+  FFibDatabase.LibraryName  := 'fbclient.dll';
+  FFibDatabase.DatabaseName := 'localhost:C:\Users\Sancho\Documents\Embarcadero\Studio\Projects\fibplus\Tests\Win32\Debug\testBase.fdb';
+  FFibDatabase.UseLegacyApi := True;
+
+  FFibDatabase.Open;
+
+  Assert.AreNotEqual(0, FFibDatabase.AttachmentID);
+  Assert.AreNotEqual(0, FFibDatabase.Allocation);
+  Assert.AreNotEqual(0, FFibDatabase.BaseLevel);
+  Assert.AreEqual(Ansistring('C:\Users\Sancho\Documents\Embarcadero\Studio\Projects\fibplus\Tests\Win32\Debug\testBase.fdb'), FFibDatabase.DBFileName, true);
+  Assert.AreEqual(Ansistring('sanchopc'), FFibDatabase.DBSiteName, true);
+  Assert.AreEqual(True, FFibDatabase.IsRemoteConnect);
+  Assert.AreNotEqual(0, FFibDatabase.DBImplementationNo);
+  Assert.AreNotEqual(0, FFibDatabase.DBImplementationClass);
+  Assert.AreEqual(0, FFibDatabase.NoReserve);
+  Assert.AreEqual(1, FFibDatabase.ODSMinorVersion);
+  Assert.AreEqual(13, FFibDatabase.ODSMajorVersion);
+  Assert.AreNotEqual(0, FFibDatabase.PageSize);
+  Assert.AreEqual(AnsiString('WI-V6.3.3.1683 Firebird 5.0'), FFibDatabase.Version);
+  Assert.AreEqual(AnsiString('WI-V5.0.3.1683 Firebird 5.0'), FFibDatabase.FBVersion);
+  Assert.AreEqual(0, FFibDatabase.FBAttachCharsetID);
+  Assert.AreEqual(5, FFibDatabase.ServerMajorVersion);
+  Assert.AreEqual(0, FFibDatabase.ServerMinorVersion);
+  Assert.AreNotEqual(0, FFibDatabase.ServerBuild);
+  Assert.AreNotEqual(0, FFibDatabase.ServerRelease);
+  Assert.AreNotEqual(0, FFibDatabase.CurrentMemory);
+  Assert.AreNotEqual(0, FFibDatabase.ForcedWrites);
+  Assert.AreNotEqual(0, FFibDatabase.MaxMemory);
+  Assert.AreNotEqual(0, FFibDatabase.NumBuffers);
+  Assert.AreNotEqual(0, FFibDatabase.SweepInterval);
+  Assert.AreNotEqual(0, FFibDatabase.UserNames.Count);
+
+
+  Assert.AreNotEqual(0, FFibDatabase.Fetches);
+  Assert.AreNotEqual(0, FFibDatabase.Marks);
+  Assert.AreNotEqual(0, FFibDatabase.Reads);
+  Assert.AreNotEqual(0, FFibDatabase.Writes);
+
+  Assert.AreNotEqual(1, FFibDatabase.BackoutCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.DeleteCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.ExpungeCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.InsertCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.PurgeCount.Count);
+  Assert.AreNotEqual(0, FFibDatabase.ReadIdxCount.Count);
+  Assert.AreNotEqual(0, FFibDatabase.ReadSeqCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.UpdateCount.Count);
+  Assert.AreNotEqual(1, FFibDatabase.PurgeCount.Count);
+
+  Assert.AreNotEqual(2, FFibDatabase.AllModifications);
+
+  Assert.AreNotEqual(1, FFibDatabase.LogFile);
+  Assert.AreEqual(AnsiString(''), FFibDatabase.CurLogFileName);
+  Assert.AreNotEqual(1, FFibDatabase.CurLogPartitionOffset);
+  Assert.AreNotEqual(1, FFibDatabase.NumWALBuffers);
+  Assert.AreNotEqual(1, FFibDatabase.WALBufferSize);
+
+  Assert.AreNotEqual(1, FFibDatabase.WALCheckpointLength);
+  Assert.AreNotEqual(1, FFibDatabase.WALCurCheckpointInterval);
+  Assert.AreEqual(AnsiString(''), FFibDatabase.WALPrvCheckpointFilename);
+  Assert.AreNotEqual(1, FFibDatabase.WALPrvCheckpointPartOffset);
+  Assert.AreNotEqual(1, FFibDatabase.WALGroupCommitWaitUSecs);
+
+  Assert.AreNotEqual(1, FFibDatabase.WALNumIO);
+  Assert.AreNotEqual(1, FFibDatabase.WALAverageIOSize);
+  Assert.AreNotEqual(1, FFibDatabase.WALNumCommits);
+  Assert.AreNotEqual(1, FFibDatabase.WALAverageGroupCommitSize);
+
+  Assert.AreNotEqual(word(1), FFibDatabase.DBSQLDialect);
+  Assert.AreNotEqual(1, FFibDatabase.ReadOnly);
+  Assert.AreNotEqual(AnsiString(''), FFibDatabase.DatabaseName);
+
+  Assert.AreNotEqual(Double(1), FFibDatabase.DifferenceTime);
+  Assert.AreNotEqual(2, FFibDatabase.ServerActiveTransactions.Count);
+  Assert.AreNotEqual(0, FFibDatabase.OldestTransactionID);
+  Assert.AreNotEqual(0, FFibDatabase.OldestActiveTransactionID);
 end;
 
 initialization
