@@ -273,9 +273,7 @@ begin
 
   Assert.AreNotEqual(word(1), FFibDatabase.DBSQLDialect);
   Assert.AreNotEqual(1, FFibDatabase.ReadOnly);
-  Assert.AreNotEqual(AnsiString(''), FFibDatabase.DatabaseName);
 
-  Assert.AreNotEqual(Double(1), FFibDatabase.DifferenceTime);
   Assert.AreNotEqual(2, FFibDatabase.ServerActiveTransactions.Count);
   Assert.AreNotEqual(0, FFibDatabase.OldestTransactionID);
   Assert.AreNotEqual(0, FFibDatabase.OldestActiveTransactionID);

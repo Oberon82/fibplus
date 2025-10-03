@@ -177,7 +177,7 @@ type
     vAttachmentID :Long;
     FBlobFilters  :TIBBlobFilters;
     FDBFileName   :string;
-    FConnectType  :ShortInt;
+//    FConnectType  :ShortInt;
     FNeedUnicodeFieldsTranslation:boolean;
     FIsUnicodeConnect:boolean;
     FIsKOI8Connect:boolean;
@@ -251,7 +251,7 @@ type
     function GetUpdatesCount(const TableName:string):integer;
     function GetDeletesCount(const TableName:string):integer;
 
-    function GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
+//    function GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
     function GetAllModifications:integer;
 
     function GetLogFile: Long;                   // isc_info_log_file
@@ -268,15 +268,11 @@ type
     function GetWALAverageIOSize: Long;          // isc_info_wal_avg_io_size
     function GetWALNumCommits: Long;             // isc_info_wal_num_commits
     function GetWALAverageGroupCommitSize: Long; // isc_info_wal_avg_grpc_size
-
-    function GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean): Long;
-    function GetStringDBInfo(DBInfoCommand: Integer): string;
-    function GetLongDBInfo(DBInfoCommand: Integer): Long;
     function GetAttachmentID  :Long;
 
 //Firebird Info
     function GetActiveTransactions: TStringList; // frb_info_active_transactions
-    function GetOldestTransaction: Long;         // frb_info_oldest_transaction
+    function GetOldestTransaction: Long;
     function GetOldestActive: Long;              // frb_info_oldest_active
     function GetOldestSnapshot: Long;            // frb_info_oldest_snapshot
     function GetFBVersion: string;               // frb_info_firebird_version
@@ -1028,7 +1024,7 @@ begin
 //  FBlobFilters     :=TIBBlobFilters.Create;
   FUseRepositories :=[urFieldsInfo,urDataSetInfo,urErrorMessagesInfo] ;
   FDBFileName      :='';
-  FConnectType     :=0;
+//  FConnectType     :=0;
   FBlobSwapSupport:=TBlobSwapSupport.Create;
 
   FGenerators:=TGeneratorsCache.Create(Self);
@@ -1985,7 +1981,7 @@ begin
   if DBSQLDialect<SQLDialect then FSQLDialect:=DBSQLDialect;
   if FSynchronizeTime and not (csDesigning in ComponentState) then
    FDifferenceTime:=Now-GetServerTime;
-  FConnectType:=0;
+//  FConnectType:=0;
   DoOnConnect;
   for i := 0 to FFIBBases.Count - 1 do
   begin
@@ -2511,7 +2507,9 @@ end;
 (* Database Info procedures -- Advanced stuff (translated from isc_database_info) *)
 function TFIBDatabase.GetAllocation: Long;
 begin
-  Result := GetLongDBInfo(isc_info_allocation);
+  CheckActive;
+  Result := FAttachment.GetAttachmentID(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetBaseLevel: Long;
@@ -2520,10 +2518,7 @@ var
   DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_base_level);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Result := ClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  Result := FAttachment.GetBaseLevel(FStatus);
 end;
 
 function TFIBDatabase.GetDBFileName: Ansistring;
@@ -2534,47 +2529,26 @@ begin
   if FDBFileName='' then
   begin
     CheckActive;
-    DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                           FIBLocalBufferLength, local_buffer), True);
-    local_buffer[5 + Int(local_buffer[4])] := #0;
-    Result := PAnsiChar(@local_buffer[5]);
-    FDBFileName := Result
+    Result := FAttachment.GetDBFileName(FStatus);
+    CheckStatus(FStatus, True);
+    FDBFileName := Result;
   end
   else
     Result:=FDBFileName
 end;
 
 function TFIBDatabase.GetDBSiteName: Ansistring;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  p: PAnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_db_id);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  p := @local_buffer[5 + Int(local_buffer[4])]; // DBSiteName Length
-  p := p + Int(p^) + 1;                         // End of DBSiteName
-  p^ := #0;                                     // Null it.
-  Result := PAnsiChar(@local_buffer[6 + Int(local_buffer[4])]);
+  Result := FAttachment.GetDBSiteName(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetIsRemoteConnect: boolean;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  if FConnectType=0 then
-  begin
-    DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                          FIBLocalBufferLength, local_buffer), True);
-    FConnectType:=Int(local_buffer[3]);
-  end;
-  Result:=FConnectType=4
+  Result := FAttachment.GetIsRemoteConnect(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetActiveTransactions: TStringList; // isc_info_active_transactions
@@ -2589,45 +2563,22 @@ begin
   Result:=FActiveTransactions;
   FActiveTransactions.Clear;
 
-  DBInfoCommand := AnsiChar(frb_info_active_transactions);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  i:=0;
-
-  while local_buffer[i] = AnsiChar(frb_info_active_transactions) do
-  begin
-    Inc(i,3);
-    L      :=ClientLibrary.isc_vax_integer(@local_buffer[i], 4);
-    Result .Add(IntToStr(L));
-    Inc(i,4);
-  end;
+  FAttachment.GetActiveTransactions(FStatus, FActiveTransactions);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetFBVersion: string; //frb_info_firebird_version
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(frb_info_firebird_version);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  if DBInfoCommand=local_buffer[0] then
-  begin
-   local_buffer[5 + Int(local_buffer[4])] := #0;
-   Result:= PAnsiChar(@local_buffer[5]);
-  end
-  else
-   Result:= '';
+  Result := FAttachment.GetFBVersion(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetAttachCharset:Integer;               // frb_info_att_charset
-var
-  Success:boolean ;
 begin
- Result:=GetProtectLongDBInfo(frb_info_att_charset,Success);
- if not Success then
-  Result := -1
+  CheckActive;
+  Result := FAttachment.GetAttachCharset(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 procedure TFIBDatabase.FillServerVersions;
@@ -2705,68 +2656,66 @@ begin
 end;
 
 function TFIBDatabase.GetDBImplementationNo: Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  Result := ClientLibrary.isc_vax_integer(@local_buffer[3], 1);
+  Result := FAttachment.GetDBImplementationNo(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetOldestTransaction: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_transaction,Success);
+  CheckActive;
+  Result := FAttachment.GetOldestTransaction(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetOldestActive: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_active,Success);
+  CheckActive;
+  Result := FAttachment.GetOldestActive(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetOldestSnapshot: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_snapshot,Success);
+  CheckActive;
+  Result := FAttachment.GetOldestSnapshot(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
-
 function TFIBDatabase.GetDBImplementationClass: Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
-  DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Result := ClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  CheckActive();
+  Result := FAttachment.GetDBImplementationClass(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetNoReserve: Long;
 begin
-  Result := GetLongDBInfo(isc_info_no_reserve);
+  CheckActive();
+  Result := FAttachment.GetNoReserve(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetODSMinorVersion: Long;
 begin
-  Result := GetLongDBInfo(isc_info_ods_minor_version);
+  CheckActive();
+  Result := FAttachment.GetODSMinorVersion(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetODSMajorVersion: Long;
 begin
-  Result := GetLongDBInfo(isc_info_ods_version);
+  CheckActive();
+  Result := FAttachment.GetODSMajorVersion(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetPageSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_page_size);
+  CheckActive();
+  Result := FAttachment.GetPageSize(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetPHandle: PISC_DB_HANDLE;
@@ -2775,26 +2724,24 @@ begin
 end;
 
 function TFIBDatabase.GetVersion: string;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
-  DBInfoCommand := AnsiChar(isc_info_version);
-
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBBigLocalBufferLength, local_buffer), True);
-  local_buffer[5 + Int(local_buffer[4])] := #0;
-  Result := PAnsiChar(@local_buffer[5]);
+  CheckActive();
+  Result := FAttachment.GetVersion(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetCurrentMemory: Long;
 begin
-  Result := GetLongDBInfo(isc_info_current_memory);
+  CheckActive();
+  Result := FAttachment.GetCurrentMemory(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetForcedWrites: Long;
 begin
-  Result := GetLongDBInfo(isc_info_forced_writes);
+  CheckActive();
+  Result := FAttachment.GetForcedWrites(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetHandle: TISC_DB_HANDLE;
@@ -2806,163 +2753,155 @@ end;
 
 function TFIBDatabase.GetMaxMemory: Long;
 begin
-  Result := GetLongDBInfo(isc_info_max_memory);
+  CheckActive();
+  Result := FAttachment.GetMaxMemory(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetNumBuffers: Long;
 begin
-  Result := GetLongDBInfo(isc_info_num_buffers);
+  CheckActive();
+  Result := FAttachment.GetNumBuffers(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetSweepInterval: Long; // isc_info_sweep_interval
 begin
-  Result := GetLongDBInfo(isc_info_sweep_interval);
+  CheckActive();
+  Result := FAttachment.GetSweepInterval(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetUserNames: TStringList;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  temp_buffer: array[0..FIBLocalBufferLength - 2] of AnsiChar;
-  DBInfoCommand: AnsiChar;
-  i, user_length: Integer;
 begin
-  if FUserNames = nil then FUserNames := TStringList.Create;
+  CheckActive();
+  if FUserNames = nil then
+    FUserNames := TStringList.Create;
+
+  FAttachment.GetUserNames(FStatus, FUserNames);
+  CheckStatus(FStatus, True);
   Result := FUserNames;
-  DBInfoCommand := AnsiChar(isc_info_user_names);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @DBInfoCommand,
-                        FIBHugeLocalBufferLength, local_buffer), True);
-  FUserNames.Clear;
-  i := 0;
-  while local_buffer[i] = AnsiChar(isc_info_user_names) do
-  begin
-    Inc(i, 3);
-    // skip "isc_info_user_names byte" & two unknown bytes of structure (see below)
-    user_length := Long(local_buffer[i]);
-    Inc(i,1);
-    Move(local_buffer[i], temp_buffer[0], user_length);
-    Inc(i, user_length);
-    temp_buffer[user_length] := #0;
-    FUserNames.Add(Ansistring(temp_buffer));
-  end;
 end;
 
 function TFIBDatabase.GetFetches: Long;
 begin
-  Result := GetLongDBInfo(isc_info_fetches);
+  CheckActive();
+  Result := FAttachment.GetFetches(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetReadOnly: Long;
 begin
-  Result := GetLongDBInfo(isc_info_db_read_only);
+  CheckActive();
+  Result := FAttachment.GetReadOnly(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetMarks: Long;
 begin
-  Result := GetLongDBInfo(isc_info_marks);
+  CheckActive();
+  Result := FAttachment.GetMarks(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetReads: Long;
 begin
-  Result := GetLongDBInfo(isc_info_reads);
+  CheckActive();
+  Result := FAttachment.GetReads(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWrites: Long;
 begin
-  Result := GetLongDBInfo(isc_info_writes);
+  CheckActive();
+  Result := FAttachment.GetWrites(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
-function TFIBDatabase.GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-  i, qtd_tables, id_table, qtd_operations: Integer;
-begin
-  if FOperation = nil then FOperation := TStringList.Create;
-  Result := FOperation;
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @_DBInfoCommand,
-                         FIBHugeLocalBufferLength, local_buffer), True);
-  FOperation.Clear;
-  // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
-  // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
-  // 3. A pair of values for each table in the database on wich the requested
-  //    type of operation has occurred since the database was last attached.
-  // Each pair consists of:
-  // 1. 2 bytes specifying the table ID.
-  // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-  qtd_tables := trunc(ClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
-  for i := 0 to qtd_tables - 1 do
-  begin
-    id_table := ClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
-    qtd_operations := ClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
-    FOperation.Add(IntToStr(id_table)+'='+IntToStr(qtd_operations));
-  end;
-end;
+//function TFIBDatabase.GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
+//var
+//  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
+//  _DBInfoCommand: AnsiChar;
+//  i, qtd_tables, id_table, qtd_operations: Integer;
+//begin
+//  if FOperation = nil then FOperation := TStringList.Create;
+//  Result := FOperation;
+//  _DBInfoCommand := AnsiChar(DBInfoCommand);
+//  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @_DBInfoCommand,
+//                         FIBHugeLocalBufferLength, local_buffer), True);
+//  FOperation.Clear;
+//  // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
+//  // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
+//  // 3. A pair of values for each table in the database on wich the requested
+//  //    type of operation has occurred since the database was last attached.
+//  // Each pair consists of:
+//  // 1. 2 bytes specifying the table ID.
+//  // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
+//  qtd_tables := trunc(ClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
+//  for i := 0 to qtd_tables - 1 do
+//  begin
+//    id_table := ClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
+//    qtd_operations := ClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
+//    FOperation.Add(IntToStr(id_table)+'='+IntToStr(qtd_operations));
+//  end;
+//end;
 
 function TFIBDatabase.GetAllModifications:integer;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-  i, qtd_tables: Integer;
-  j:byte;
 begin
-  Result := 0;
-  for j:=isc_info_insert_count to isc_info_delete_count do
-  begin
-    _DBInfoCommand:=AnsiChar(j);
-    Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @_DBInfoCommand,
-                           FIBHugeLocalBufferLength, local_buffer), True);
-    // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
-    // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
-    // 3. A pair of values for each table in the database on wich the requested
-    //    type of operation has occurred since the database was last attached.
-    // Each pair consists of:
-    // 1. 2 bytes specifying the table ID.
-    // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-    qtd_tables := trunc(ClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
-    for i := 0 to qtd_tables - 1 do
-    begin
-      Inc(Result,ClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4));
-    end;
-  end;
+  CheckActive;
+  Result := FAttachment.GetAllModifications(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetBackoutCount: TStringList;
 begin
- if FBackoutCount=nil then FBackoutCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_backout_count,FBackoutCount);
+  if FBackoutCount=nil then FBackoutCount:=TStringList.Create;
+  FAttachment.GetBackoutCount(FStatus, FBackoutCount);
+  CheckStatus(FStatus, True);
+  Result := FBackoutCount;
 end;
 
 function TFIBDatabase.GetDeleteCount: TStringList;
 begin
- if FDeleteCount=nil then FDeleteCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_delete_count,FDeleteCount);
+  if FDeleteCount=nil then FDeleteCount:=TStringList.Create;
+  FAttachment.GetDeleteCount(FStatus, FDeleteCount);
+  CheckStatus(FStatus, True);
+  Result := FDeleteCount;
 end;
 
 function TFIBDatabase.GetExpungeCount: TStringList;
 begin
  if FExpungeCount=nil then FExpungeCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_expunge_count,FExpungeCount);
+  FAttachment.GetExpungeCount(FStatus, FExpungeCount);
+  CheckStatus(FStatus, True);
+  Result := FExpungeCount;
 end;
 
 function TFIBDatabase.GetInsertCount: TStringList;
 begin
  if FInsertCount=nil then FInsertCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_insert_count,FInsertCount);
+   FAttachment.GetInsertCount(FStatus, FInsertCount);
+  CheckStatus(FStatus, True);
+  Result := FInsertCount;
 end;
 
 
 function TFIBDatabase.GetPurgeCount: TStringList;
 begin
  if FPurgeCount=nil then FPurgeCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_purge_count,FPurgeCount);
+   FAttachment.GetPurgeCount(FStatus, FPurgeCount);
+  CheckStatus(FStatus, True);
+  Result := FPurgeCount;
 end;
 
 function TFIBDatabase.GetReadIdxCount: TStringList;
 begin
  if FReadIdxCount=nil then
   FReadIdxCount:=TStringList.Create;
- Result := GetOperationCounts(isc_info_read_idx_count,FReadIdxCount);
+
+   FAttachment.GetReadIdxCount(FStatus, FReadIdxCount);
+  CheckStatus(FStatus, True);
+  Result := FReadIdxCount;
 end;
 
 function TFIBDatabase.GetTableOperationInfo(const TableName:string; FromStrs:TStrings):integer;
@@ -3011,117 +2950,115 @@ end;
 function TFIBDatabase.GetReadSeqCount: TStringList;
 begin
  if FReadSeqCount=nil then FReadSeqCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_read_seq_count,FReadSeqCount);
+  FAttachment.GetReadIdxCount(FStatus, FReadSeqCount);
+  CheckStatus(FStatus, True);
+  Result := FReadSeqCount;
 end;
 
 function TFIBDatabase.GetUpdateCount: TStringList;
 begin
  if FUpdateCount=nil then FUpdateCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_update_count,FUpdateCount);
+  FAttachment.GetUpdateCount(FStatus, FUpdateCount);
+  CheckStatus(FStatus, True);
+  Result := FUpdateCount;
 end;
 
 function TFIBDatabase.GetLogFile: Long;
 begin
-  Result := GetLongDBInfo(isc_info_logfile);
+  CheckActive();
+  Result := FAttachment.GetLogFile(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetCurLogFileName: string;
 begin
-  Result := GetStringDBInfo(isc_info_cur_logfile_name);
+  CheckActive();
+  Result := FAttachment.GetCurLogFileName(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetCurLogPartitionOffset: Long;
 begin
-  Result := GetLongDBInfo(isc_info_cur_log_part_offset);
+  CheckActive();
+  Result := FAttachment.GetCurLogPartitionOffset(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetNumWALBuffers: Long;
 begin
-  Result := GetLongDBInfo(isc_info_num_wal_buffers);
+  CheckActive();
+  Result := FAttachment.GetNumWALBuffers(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALBufferSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_buffer_size);
+  CheckActive();
+  Result := FAttachment.GetWALBufferSize(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALCheckpointLength: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_ckpt_length);
+  CheckActive();
+  Result := FAttachment.GetWALCheckpointLength(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALCurCheckpointInterval: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_cur_ckpt_interval);
+  CheckActive();
+  Result := FAttachment.GetWALCurCheckpointInterval(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALPrvCheckpointFilename: string;
 begin
-  Result := GetStringDBInfo(isc_info_wal_prv_ckpt_fname);
+  CheckActive();
+  Result := FAttachment.GetWALPrvCheckpointFilename(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALPrvCheckpointPartOffset: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_prv_ckpt_poffset);
+  CheckActive();
+  Result := FAttachment.GetWALPrvCheckpointPartOffset(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALGroupCommitWaitUSecs: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_grpc_wait_usecs);
+  CheckActive();
+  Result := FAttachment.GetWALGroupCommitWaitUSecs(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALNumIO: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_num_io);
+  CheckActive();
+  Result := FAttachment.GetWALNumIO(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALAverageIOSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_avg_io_size);
+  CheckActive();
+  Result := FAttachment.GetWALAverageIOSize(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALNumCommits: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_num_commits);
+  CheckActive();
+  Result := FAttachment.GetWALNumCommits(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetWALAverageGroupCommitSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_avg_grpc_size);
-end;
-
-function TFIBDatabase.GetProtectLongDBInfo
- (DBInfoCommand: Integer;var Success:boolean): Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  length: Integer;
-  _DBInfoCommand: AnsiChar;
-begin
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @_DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Success:=local_buffer[0] = _DBInfoCommand;
-  length := ClientLibrary.isc_vax_integer(@local_buffer[1], 2);
-  Result := ClientLibrary.isc_vax_integer(@local_buffer[3], length);
-
-end;
-
-function TFIBDatabase.GetLongDBInfo(DBInfoCommand: Integer): Long;
-var Success:boolean;
-begin
-  Result := GetProtectLongDBInfo(DBInfoCommand,Success)
-end;
-
-function TFIBDatabase.GetStringDBInfo(DBInfoCommand: Integer): string;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-begin
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(ClientLibrary.isc_database_info(StatusVector, PHandle, 1, @_DBInfoCommand,
-                         FIBBigLocalBufferLength, local_buffer), True);
-  local_buffer[4 + Int(local_buffer[3])] := #0;
-  Result := PAnsiChar(@local_buffer[4]);
+  CheckActive();
+  Result := FAttachment.GetWALNumCommits(FStatus);
+  CheckStatus(FStatus, True);
 end;
 
 function TFIBDatabase.GetAttachmentID  :Long;
@@ -3132,7 +3069,7 @@ begin
    Result    := -1
   else
   begin
-    Result:= GetLongDBInfo(isc_info_attachment_id);
+    Result := FAttachment.GetAttachmentID(FStatus);
     vAttachmentID:=Result;
   end;
  end
@@ -3146,8 +3083,9 @@ end;
 function TFIBDatabase.GetDBSQLDialect:Word;
 var Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(isc_info_db_SQL_dialect,Success);
- if not Success then Result:=1
+  CheckActive;
+  Result := FAttachment.GetDBSQLDialect(FStatus);
+  CheckStatus(FStatus, true);
 end;
 
 
