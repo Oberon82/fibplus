@@ -3505,7 +3505,7 @@ begin
             );
           if (StatusVector^ = 1) and (isc_res > 0)
            and not CheckStatusVector([isc_bad_stmt_handle, isc_dsql_cursor_close_err]) then
-            IBError(Database.ClientLibrary,Self);
+            IBError(Database.ClientLibrary,Self, StatusVector);
         end;
       end;
     finally
@@ -3526,7 +3526,7 @@ begin
   if Transaction <> nil then
     Result := Transaction.Call(ErrCode, False);
   if (ErrCode > 0) and RaiseError then
-    IbError(Database.ClientLibrary,Self);
+    IbError(Database.ClientLibrary,Self, StatusVector);
 end;
 
 function TFIBQuery.Current: TFIBXSQLDA;
@@ -3948,7 +3948,7 @@ begin
   Call(
     Database.ClientLibrary.
     isc_dsql_execute_immediate(
-     StatusVector, @Database.Handle, @Transaction.Handle, 0,
+     StatusVector, Database.PHandle, @Transaction.Handle, 0,
      PAnsiChar(AnsiString(FPreparedSQL)), Database.SQLDialect, xSQLDA
     ),
    True
@@ -4258,7 +4258,7 @@ begin
         if Assigned(Database.SQLLogger)  and (lfQExecute in Database.SQLLogger.LogFlags) then
          DoLog;
         if (fetch_res <> 0) then
-         IbError(Database.ClientLibrary,Self) ;
+         IbError(Database.ClientLibrary,Self, StatusVector) ;
        FProcExecuted:=True;
       end;
       SQLCommit:
@@ -4527,7 +4527,7 @@ begin
             FEOF := True
            else
            try
-             IbError(FBase.Database.ClientLibrary,Self);
+             IbError(FBase.Database.ClientLibrary,Self, StatusVector);
            except
               Close;
               raise ;
@@ -4569,7 +4569,7 @@ begin
           False
         );
       if (StatusVector^ = 1) and (isc_res > 0) and (isc_res <> isc_bad_stmt_handle) then
-        IbError(Database.ClientLibrary,Self);
+        IbError(Database.ClientLibrary,Self, StatusVector);
       FEOF:=True;  
     end;
   finally
@@ -4925,7 +4925,7 @@ begin
 
     if isc_dsql_sql_info(StatusVector, @FHandle, 1, @info_request,
                          255, InfoBuffer) > 0 then
-      IbError(Database.ClientLibrary,Self);
+      IbError(Database.ClientLibrary,Self, StatusVector);
     if (InfoBuffer[0] = AnsiChar(isc_info_end)) then
      Exit;
     if (InfoBuffer[0] <> AnsiChar(isc_info_sql_records)) then
@@ -4939,7 +4939,7 @@ begin
      AllocAddr :=InfoBuffer;
      if isc_dsql_sql_info(StatusVector, @FHandle, 1, @info_request,
                          InfoLen, InfoBuffer) > 0 then
-      IbError(Database.ClientLibrary,Self);
+      IbError(Database.ClientLibrary,Self, StatusVector);
      Inc(InfoBuffer);
     end;
     Inc(InfoBuffer,2);
@@ -5487,7 +5487,7 @@ begin
      end;
     end;
  except
-   IbError(Database.ClientLibrary,Self)
+   IbError(Database.ClientLibrary,Self, StatusVector)
  end;
 end;
 
@@ -5680,7 +5680,7 @@ begin
                  FSQLParams.FXSQLDA
               ), False) > 0
              then
-               IbError(Database.ClientLibrary,Self)
+               IbError(Database.ClientLibrary,Self, StatusVector)
              else
              begin
               if (ParamsSQLDA=FUserSQLParams.FXSQLDA) then

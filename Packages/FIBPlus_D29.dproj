@@ -154,7 +154,7 @@
         <DCCReference Include="..\Interfaces\Fb25\IB_InstallHeader.pas"/>
         <DCCReference Include="..\FIBSafeTimer.pas"/>
         <DCCReference Include="..\IBBlobFilter.pas"/>
-        <DCCReference Include="..\IB_Externals.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\IB_Externals.pas"/>
         <DCCReference Include="..\pFIBDataInfo.pas"/>
         <DCCReference Include="..\pFIBEventLists.pas"/>
         <DCCReference Include="..\FIBMiscellaneous.pas"/>

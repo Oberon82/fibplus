@@ -177,7 +177,7 @@ begin
     end;
 
  except
-   IbError(ClientLibrary,Self)
+   IbError(ClientLibrary,Self, StatusVector)
  end;
 end;
 

@@ -45,7 +45,7 @@ contains
   IB_InstallHeader in '..\Interfaces\Fb25\IB_InstallHeader.pas',
   FIBSafeTimer in '..\FIBSafeTimer.pas',
   IBBlobFilter in '..\IBBlobFilter.pas',
-  IB_Externals in '..\IB_Externals.pas',
+  IB_Externals in '..\Interfaces\Fb25\IB_Externals.pas',
   pFIBDataInfo in '..\pFIBDataInfo.pas',
   pFIBEventLists in '..\pFIBEventLists.pas',
   FIBMiscellaneous in '..\FIBMiscellaneous.pas',

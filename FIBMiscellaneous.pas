@@ -456,6 +456,7 @@ end;
 function GetBlobInfoRec(DB:TFIBDatabase;TR:TFIBTransaction; blob_id : TISC_QUAD;var Success :boolean ):TBlobInfo;
 var
  BlobHandle: TISC_BLOB_HANDLE;
+ handle: TISC_DB_HANDLE;
 begin
  if not Assigned(DB) or not Assigned(TR) or not TR.Active then
  begin
@@ -466,9 +467,10 @@ begin
     EAPICallException.Create(Format(SUnknownClientLibrary,['GetBlobInfo']));
 
  BlobHandle:=nil;
+ handle := DB.Handle;
  Success :=
   DB.ClientLibrary.isc_open_blob2(
-   StatusVector, @DB.Handle, @TR.Handle, @BlobHandle,@blob_id, 0, nil)=0;
+    StatusVector, @handle, @TR.Handle, @BlobHandle,@blob_id, 0, nil)=0;
  if Success  then
  with Result do 
  begin
@@ -498,7 +500,7 @@ begin
 
   if ClientLibrary.isc_blob_info(StatusVector, hBlobHandle, 4, @items[0], SizeOf(results),
                     @results[0]) > 0 then
-    IBError(ClientLibrary,nil);
+    IBError(ClientLibrary,nil, StatusVector);
 
   i := 0;
   while (i < SizeOf(results)) and (results[i] <> AnsiChar(isc_info_end)) do
@@ -547,7 +549,7 @@ begin
                StatusVector, hBlobHandle, @BytesRead, SegLen,
                LocalBuffer) = 0) or
             (StatusVectorArray[1] = isc_segment)) then
-      IBError(ClientLibrary,nil);
+      IBError(ClientLibrary,nil, StatusVector);
     Inc(LocalBuffer, BytesRead);
     Inc(AllReadBytes,BytesRead);
     if Assigned(CallBack) then
@@ -604,7 +606,7 @@ begin
        Exit;
     end
    else
-    IBError(ClientLibrary,nil);
+    IBError(ClientLibrary,nil, StatusVector);
    end;
   end;
 end;
@@ -627,7 +629,7 @@ begin
       SegLen := BlobSize - CurPos;
     if ClientLibrary.isc_put_segment(StatusVector, hBlobHandle, SegLen,
          PAnsiChar(@Buffer[CurPos])) > 0 then
-      IBError(ClientLibrary,nil);
+      IBError(ClientLibrary,nil, StatusVector);
     Inc(CurPos, SegLen);
     if Assigned(CallBack) then
      CallBack(BlobSize,CurPos,Stop);
@@ -766,7 +768,7 @@ begin
     Result := Transaction.Call(ErrCode, RaiseError)
   else
   if RaiseError and (ErrCode > 0) then
-    IBError(FDatabase.ClientLibrary,Self);
+    IBError(FDatabase.ClientLibrary,Self, StatusVector);
 end;
 
 procedure TFIBBlobStream.CheckReadable;
@@ -784,7 +786,7 @@ procedure TFIBBlobStream.CloseBlob;
 begin
   if (FBlobHandle <> nil) and
      (Call(FDatabase.ClientLibrary.isc_close_blob(StatusVector, @FBlobHandle), False) > 0) then
-    IBError(FDatabase.ClientLibrary,Self);
+    IBError(FDatabase.ClientLibrary,Self, StatusVector);
   FBlobHandle:=nil;
   FBlobInitialized:=false;
 end;
@@ -925,9 +927,14 @@ begin
 end;
 
 function TFIBBlobStream.GetDBHandle: PISC_DB_HANDLE;
+var
+  handle: TISC_DB_HANDLE;
 begin
   if Assigned(FDatabase)  and Assigned(FDatabase.Handle) then
-   Result := @FDatabase.Handle
+  begin
+    handle := FDatabase.Handle;
+    Result := @handle
+  end
   else
    Result :=nil;  
 end;
@@ -1589,7 +1596,7 @@ begin
          Exit;
       end
      else
-      IBError(FDatabase.ClientLibrary,nil);
+      IBError(FDatabase.ClientLibrary,nil, StatusVector);
      end;
 
     end;

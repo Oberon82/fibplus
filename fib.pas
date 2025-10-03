@@ -27,7 +27,7 @@ unit fib;
 interface
 
 uses
-  SyncObjs,SysUtils, Classes, ibase,IB_Intf, ib_externals,Db,FIBPlatforms;
+  SyncObjs,SysUtils, Classes, ibase,IB_Intf, ib_externals,Db,FIBPlatforms, FbClasses;
 
 
 type
@@ -325,7 +325,7 @@ procedure FIBAlloc(var p; OldSize, NewSize: DWORD);
 procedure FIBError(ErrMess: TFIBClientError; const Args: array of const);
 procedure FIBErrorEx(const ErrMess:string; const Args: array of const);
 
-procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject);
+procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject; AStatusVector: PISC_STATUS);
 
 procedure RegisterErrorHandler(aErrorHandler:TComponent);
 procedure UnRegisterErrorHandler;
@@ -415,7 +415,7 @@ end;
  *  Examine the status vector, and raise an
  *  exception based on the current values in it.
  *)
-procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject);
+procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject; AStatusVector: PISC_STATUS);
 var
   sqlcode: Long;
 //  vFbSQLState : array[0..FB_sqlstate_bufSize-1] of AnsiChar;
@@ -437,7 +437,7 @@ begin
    * Get a local copy of the IBErrorMessages options.
    * Get the SQL error code.
    *)
-  status_vector := StatusVector;
+  status_vector := AStatusVector;
   IBErrorMessages := GetIBErrorMessages;
   sqlcode := ClientLibrary.isc_sqlcode(status_vector);
 //  FillChar(vFbSQLState,FB_sqlstate_bufSize,0);

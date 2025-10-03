@@ -25,7 +25,7 @@ unit IB_Externals;
 interface
 
 uses
-{$I FIBPlus.inc}
+{$I ..\..\FIBPlus.inc}
 
 
   FIBPlatforms,StdFuncs;

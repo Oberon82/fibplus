@@ -614,7 +614,7 @@ begin
                          FSPBLength, FSPB), False) > 0 then
   begin
     FHandle := nil;
-    IBError(FClientLibrary, Self);
+    IBError(FClientLibrary, Self, StatusVector);
   end;
 
   if Assigned(FOnAttach) then
@@ -768,7 +768,7 @@ begin
   if (Call(FClientLibrary.isc_service_detach(StatusVector, @FHandle), False) > 0) then
   begin
     FHandle := nil;
-    IBError(FClientLibrary, Self);
+    IBError(FClientLibrary, Self, StatusVector);
   end
   else
     FHandle := nil;
@@ -827,7 +827,7 @@ begin
                            FBufferSize, FOutputBuffer), False) > 0 then
     begin
       FHandle := nil;
-      IBError(FClientLibrary, Self);
+      IBError(FClientLibrary, Self, StatusVector);
     end;
   finally
     FreeMem(FQuerySPB);
@@ -949,7 +949,7 @@ function TpFIBCustomService.Call(ErrCode: ISC_STATUS;
 begin
   result := ErrCode;
   if RaiseError and (ErrCode > 0) then
-    IBError(FClientLibrary, Self);
+    IBError(FClientLibrary, Self, StatusVector);
 end;
 
 function TpFIBCustomService.ParseString(var RunLen: Integer): Ansistring;
@@ -1385,7 +1385,7 @@ begin
                            FStartSPBLength, FStartSPB), False) > 0 then
     begin
       FHandle := nil;
-      IBError(FClientLibrary, Self);
+      IBError(FClientLibrary, Self, StatusVector);
     end;
   finally
     FreeMem(FStartSPB);
