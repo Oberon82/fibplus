@@ -3948,7 +3948,7 @@ begin
   Call(
     Database.ClientLibrary.
     isc_dsql_execute_immediate(
-     StatusVector, Database.PHandle, @Transaction.Handle, 0,
+     StatusVector, Database.PHandle, Transaction.GetPHandle, 0,
      PAnsiChar(AnsiString(FPreparedSQL)), Database.SQLDialect, xSQLDA
     ),
    True

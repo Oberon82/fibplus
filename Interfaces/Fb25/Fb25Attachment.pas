@@ -1,17 +1,12 @@
-unit Fb25Classes;
+unit Fb25Attachment;
 
 interface
 uses
-  FbClasses,
-  IB_Intf,
-  System.SysUtils, IB_Externals, ibase, System.Classes, StrUtil;
+  FbInterfaces, Fb25Interfaces, IB_Intf, IB_Externals, ibase, System.Classes;
 
 type
 
-  TStatusVector  = array[0..19] of ISC_STATUS;
-  PStatusVector  = ^TStatusVector;
-
-  TFb25AttachmentParams = class(TFbAttachmentParams)
+  TFb25AttachmentParams = class(TInterfacedObject, IFb25AttachmentParams)
   private
     FDPB      : PAnsiChar;
     FDPBLength: Short;
@@ -19,154 +14,100 @@ type
   protected
 
   public
-    procedure GenerateParams(AParams: TStringList; IsFireBird: Boolean); override;
+    procedure GenerateParams(AParams: TStrings; IsFireBird: Boolean);
+    function GetDPBLength: Short;
+    function GetDPB      : PAnsiChar;
   end;
 
-  TFb25Attachment = class(TFbAttachment)
+  TFb25Attachment = class(TInterfacedObject, IFb25Attachment)
   private
     FClientLibrary:IIBClientLibrary;
     FHandle: TISC_DB_HANDLE;
-    function GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean; AStatus: TFbStatus): Long;
-    function GetStringDBInfo(DBInfoCommand: Integer; AStatus: TFbStatus): string;
-    function GetLongDBInfo(DBInfoCommand: Integer; AStatus: TFbStatus): Long;
-    function GetOperationCounts(DBInfoCommand: Integer; AStatus: TFbStatus; var FOperation: TStringList): TStringList;
+    function GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean; AStatus: IFbStatus): Long;
+    function GetStringDBInfo(DBInfoCommand: Integer; AStatus: IFbStatus): string;
+    function GetLongDBInfo(DBInfoCommand: Integer; AStatus: IFbStatus): Long;
+    function GetOperationCounts(DBInfoCommand: Integer; AStatus: IFbStatus; var FOperation: TStringList): TStringList;
   protected
+    function GetHandle: TISC_DB_HANDLE;
+    function GetPHandle: PISC_DB_HANDLE;
   public
     constructor Create(AClientLibrary:IIBClientLibrary; AHandle: TISC_DB_HANDLE);
-    property Handle: TISC_DB_HANDLE read FHandle; // TODO: remove
-    procedure DropDatabase(AFbStatus: TFbStatus); override;
-    procedure DetachDatabase(AFbStatus: TFbStatus); override;
-    function GetAttachmentID(AStatus: TFbStatus): LongInt; override;
-    function GetAllocation(AStatus: TFbStatus): LongInt; override;
-    function GetBaseLevel(AStatus: TFbStatus): LongInt; override;
-    function GetDBFileName(AStatus: TFbStatus): Ansistring; override;
-    function GetDBSiteName(AStatus: TFbStatus): Ansistring; override;
-    function GetIsRemoteConnect(AStatus: TFbStatus): boolean; override;
+    procedure DropDatabase(AFbStatus: IFbStatus);
+    procedure DetachDatabase(AFbStatus: IFbStatus);
+    function GetAttachmentID(AStatus: IFbStatus): LongInt;
+    function GetAllocation(AStatus: IFbStatus): LongInt;
+    function GetBaseLevel(AStatus: IFbStatus): LongInt;
+    function GetDBFileName(AStatus: IFbStatus): Ansistring;
+    function GetDBSiteName(AStatus: IFbStatus): Ansistring;
+    function GetIsRemoteConnect(AStatus: IFbStatus): boolean;
 
-    function GetDBImplementationNo(AStatus: TFbStatus): LongInt; override;
-    function GetDBImplementationClass(AStatus: TFbStatus): LongInt; override;
-    function GetNoReserve(AStatus: TFbStatus): LongInt; override;
-    function GetODSMinorVersion(AStatus: TFbStatus): LongInt; override;
-    function GetODSMajorVersion(AStatus: TFbStatus): LongInt; override;
-    function GetPageSize(AStatus: TFbStatus): LongInt; override;
-    function GetVersion(AStatus: TFbStatus): string; override;
-    function GetCurrentMemory(AStatus: TFbStatus): LongInt; override;
-    function GetForcedWrites(AStatus: TFbStatus): LongInt; override;
-    function GetMaxMemory(AStatus: TFbStatus): LongInt; override;
-    function GetNumBuffers(AStatus: TFbStatus): LongInt; override;
-    function GetSweepInterval(AStatus: TFbStatus): LongInt; override;
-    procedure GetUserNames(AStatus: TFbStatus; AList: TStringList); override;
+    function GetDBImplementationNo(AStatus: IFbStatus): LongInt;
+    function GetDBImplementationClass(AStatus: IFbStatus): LongInt;
+    function GetNoReserve(AStatus: IFbStatus): LongInt;
+    function GetODSMinorVersion(AStatus: IFbStatus): LongInt;
+    function GetODSMajorVersion(AStatus: IFbStatus): LongInt;
+    function GetPageSize(AStatus: IFbStatus): LongInt;
+    function GetVersion(AStatus: IFbStatus): string;
+    function GetCurrentMemory(AStatus: IFbStatus): LongInt;
+    function GetForcedWrites(AStatus: IFbStatus): LongInt;
+    function GetMaxMemory(AStatus: IFbStatus): LongInt;
+    function GetNumBuffers(AStatus: IFbStatus): LongInt;
+    function GetSweepInterval(AStatus: IFbStatus): LongInt;
+    procedure GetUserNames(AStatus: IFbStatus; AList: TStringList);
 
-    function GetFetches(AStatus: TFbStatus): LongInt; override;
-    function GetMarks(AStatus: TFbStatus): LongInt; override;
-    function GetReads(AStatus: TFbStatus): LongInt; override;
-    function GetWrites(AStatus: TFbStatus): LongInt; override;
-    procedure GetBackoutCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetDeleteCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetExpungeCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetInsertCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetPurgeCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetReadIdxCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetReadSeqCount(AStatus: TFbStatus; AList: TStringList); override;
-    procedure GetUpdateCount(AStatus: TFbStatus; AList: TStringList); override;
+    function GetFetches(AStatus: IFbStatus): LongInt;
+    function GetMarks(AStatus: IFbStatus): LongInt;
+    function GetReads(AStatus: IFbStatus): LongInt;
+    function GetWrites(AStatus: IFbStatus): LongInt;
+    procedure GetBackoutCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetDeleteCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetExpungeCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetInsertCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetPurgeCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetReadIdxCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetReadSeqCount(AStatus: IFbStatus; AList: TStringList);
+    procedure GetUpdateCount(AStatus: IFbStatus; AList: TStringList);
 
-    function GetAllModifications(AStatus: TFbStatus):integer; override;
+    function GetAllModifications(AStatus: IFbStatus):integer;
 
-    function GetLogFile(AStatus: TFbStatus): LongInt; override;
-    function GetCurLogFileName(AStatus: TFbStatus): string; override;
-    function GetCurLogPartitionOffset(AStatus: TFbStatus): LongInt; override;
-    function GetNumWALBuffers(AStatus: TFbStatus): LongInt; override;
-    function GetWALBufferSize(AStatus: TFbStatus): LongInt; override;
-    function GetWALCheckpointLength(AStatus: TFbStatus): LongInt; override;
-    function GetWALCurCheckpointInterval(AStatus: TFbStatus): LongInt; override;
-    function GetWALPrvCheckpointFilename(AStatus: TFbStatus): string; override;
-    function GetWALPrvCheckpointPartOffset(AStatus: TFbStatus): LongInt; override;
-    function GetWALGroupCommitWaitUSecs(AStatus: TFbStatus): LongInt; override;
-    function GetWALNumIO(AStatus: TFbStatus): LongInt; override;
-    function GetWALAverageIOSize(AStatus: TFbStatus): LongInt; override;
-    function GetWALNumCommits(AStatus: TFbStatus): LongInt; override;
-    function GetWALAverageGroupCommitSize(AStatus: TFbStatus): LongInt; override;
+    function GetLogFile(AStatus: IFbStatus): LongInt;
+    function GetCurLogFileName(AStatus: IFbStatus): string;
+    function GetCurLogPartitionOffset(AStatus: IFbStatus): LongInt;
+    function GetNumWALBuffers(AStatus: IFbStatus): LongInt;
+    function GetWALBufferSize(AStatus: IFbStatus): LongInt;
+    function GetWALCheckpointLength(AStatus: IFbStatus): LongInt;
+    function GetWALCurCheckpointInterval(AStatus: IFbStatus): LongInt;
+    function GetWALPrvCheckpointFilename(AStatus: IFbStatus): string;
+    function GetWALPrvCheckpointPartOffset(AStatus: IFbStatus): LongInt;
+    function GetWALGroupCommitWaitUSecs(AStatus: IFbStatus): LongInt;
+    function GetWALNumIO(AStatus: IFbStatus): LongInt;
+    function GetWALAverageIOSize(AStatus: IFbStatus): LongInt;
+    function GetWALNumCommits(AStatus: IFbStatus): LongInt;
+    function GetWALAverageGroupCommitSize(AStatus: IFbStatus): LongInt;
 
     //Firebird Info
-    procedure GetActiveTransactions(AStatus: TFbStatus; AList: TStringList); override;
-    function GetOldestTransaction(AStatus: TFbStatus): LongInt; override;
-    function GetOldestActive(AStatus: TFbStatus): LongInt; override;
-    function GetOldestSnapshot(AStatus: TFbStatus): LongInt; override;
-    function GetFBVersion(AStatus: TFbStatus): string; override;
-    function GetAttachCharset(AStatus: TFbStatus): integer; override;
+    procedure GetActiveTransactions(AStatus: IFbStatus; AList: TStringList);
+    function GetOldestTransaction(AStatus: IFbStatus): LongInt;
+    function GetOldestActive(AStatus: IFbStatus): LongInt;
+    function GetOldestSnapshot(AStatus: IFbStatus): LongInt;
+    function GetFBVersion(AStatus: IFbStatus): string;
+    function GetAttachCharset(AStatus: IFbStatus): integer;
 
-    function GetDBSQLDialect(AStatus: TFbStatus): Word; override;
-    function GetReadOnly(AStatus: TFbStatus): LongInt; override;
-  end;
+    function GetDBSQLDialect(AStatus: IFbStatus): Word;
+    function GetReadOnly(AStatus: IFbStatus): LongInt;
 
-  TFb25TransactionParams = class(TFbTransactionParams)
-
-  end;
-
-  TFb25Transaction = class(TFbTransaction)
-
-  end;
-
-  TFb25Statement = class(TFbStatement)
-
-  end;
-
-  TFb25Blob = class(TFbBlob)
-
-  end;
-
-  TFb25Array = class(TFbArray)
-
-  end;
-
-  TFb25Status = class(TFbStatus)
-  private
-  public
-    function StatusVector: PISC_STATUS;
-    function HasErrors: boolean; override;
-    function GetStatusVector: TStatusVector;
-  end;
-
-  TFb25ResultSet = class(TFbResultSet)
-
-  end;
-
-  TFb25MessageMetadata = class(TFbMessageMetadata)
-
-  end;
-
-  TFb25Provider = class(TFbProvider)
-  private
-    FClientLibrary:IIBClientLibrary;
-  protected
-  public
-    constructor Create(AClientLibrary:IIBClientLibrary);
-    function AttachDatabase(AStatus: TFbStatus; AFileName: string; AParams: TFbAttachmentParams): TFbAttachment; override;
-    function CreateDatabase(AStatus: TFbStatus; AFileName: string; AParams: TFbAttachmentParams): TFbAttachment; override;
-    function GetAttachmentParams: TFbAttachmentParams; override;
-    function GetTransactionParams: TFbTransactionParams; override;
-    function GetStatus: TFbStatus; override;
-    property ClientLibrary:IIBClientLibrary read FClientLibrary;
-  end;
-
-  TFb25ClientLibrary = class(TObject)
-    class function GetProvider(ALibraryName: string): TFb25Provider;
+    function StartTransaction(AStatus: IFbStatus; AParams: IFbTransactionParams): IFbTransaction;
+    function StartDistributedTransaction(AStatus: IFbStatus; AParams: IFbTransactionParams): IFbTransaction;
   end;
 
 implementation
 uses
-  FIBPlatforms;
+  System.SysUtils, StrUtil, fib;
 
-threadvar
-  FStatusVector : TStatusVector;   // TODO: Remove in FIB
+var
+  DPBConstants    :TStringList;
 
 const
-  (* For building buffers to send to IB *)
-  CRLF = #13#10;
-  FIBLocalBufferLength = 512;
-  FIBBigLocalBufferLength = FIBLocalBufferLength * 2;
-  FIBHugeLocalBufferLength = FIBBigLocalBufferLength * 20;
-  (* Default "Prefix" to show in error messages. *)
 
 DPBPrefix = 'isc_dpb_';
   DPBConstantNames: array[1..isc_dpb_last_dpb_constant] of String = (
@@ -319,12 +260,7 @@ begin
   end;
 end;
 
-var
-  DPBConstants    :TStringList;
-
-
-
-procedure TFb25AttachmentParams.GenerateParams(AParams: TStringList; IsFireBird: Boolean);
+procedure TFb25AttachmentParams.GenerateParams(AParams: TStrings; IsFireBird: Boolean);
 var
   i : integer;
   j, DPBVal:integer;
@@ -505,103 +441,15 @@ begin
   FDPB := @DPB[1];
 end;
 
-
-{ TFb25Status }
-
-function TFb25Status.GetStatusVector: TStatusVector;
+function TFb25AttachmentParams.GetDPB: PAnsiChar;
 begin
-  Result := FStatusVector;
+  Result := FDPB;
 end;
 
-function TFb25Provider.AttachDatabase(AStatus: TFbStatus; AFileName: string; AParams: TFbAttachmentParams):
-    TFbAttachment;
-var
-  DPB: AnsiString;
-  tr_handle: TISC_TR_HANDLE;
-  db_handle: TISC_DB_HANDLE;
-  FDBName: AnsiString;
-  StatusVector: PISC_STATUS;
+function TFb25AttachmentParams.GetDPBLength: Short;
 begin
-  Result := nil;
-  tr_handle := nil;
-  db_handle := nil;
-  FDBName := AFileName;
-  StatusVector  := (AStatus as TFb25Status).StatusVector;
-  ClientLibrary.isc_attach_database(StatusVector, Length(FDBName), PAnsiChar(FDBName), @db_handle,
-    (AParams as TFb25AttachmentParams).FDPBLength, (AParams as TFb25AttachmentParams).FDPB);
-
-  if not AStatus.HasErrors then
-  begin
-    Result := TFb25Attachment.Create(ClientLibrary, db_handle);
-  end;
+  Result := FDPBLength;
 end;
-
-constructor TFb25Provider.Create(AClientLibrary:IIBClientLibrary);
-begin
-  FClientLibrary := AClientLibrary;
-end;
-
-function TFb25Provider.CreateDatabase(AStatus: TFbStatus; AFileName: string; AParams: TFbAttachmentParams):
-    TFbAttachment;
-var
-  tr_handle: TISC_TR_HANDLE;
-  db_handle: TISC_DB_HANDLE;
-begin
-  Result := nil;
-  tr_handle := nil;
-  db_handle := nil;
-  ClientLibrary.isc_dsql_execute_immediate((AStatus as TFb25Status).StatusVector, @db_handle, @tr_handle, 0,
-     PAnsiChar('CREATE DATABASE ''' + AFileName + ''' ' //+AnsiString(DBParams.Text)
-    ), 3, nil);  // TODO: AddDBParams and dialect
-
-  if not AStatus.HasErrors then
-  begin
-    Result := TFb25Attachment.Create(ClientLibrary, db_handle);
-  end;
-end;
-
-function TFb25Provider.GetAttachmentParams: TFbAttachmentParams;
-begin
-  Result := TFb25AttachmentParams.Create;
-end;
-
-function TFb25Provider.GetStatus: TFbStatus;
-begin
-  Result := TFb25Status.Create;
-end;
-
-function TFb25Provider.GetTransactionParams: TFbTransactionParams;
-begin
-  Result := TFb25TransactionParams.Create;
-end;
-
-function TFb25Status.HasErrors: boolean;
-begin
-  Result := ((FStatusVector[0] = 1) and (FStatusVector[1] > 0));
-end;
-
-function TFb25Status.StatusVector: PISC_STATUS;
-begin
-  Result := PISC_STATUS(@FStatusVector);
-end;
-
-{ TFb25ClientLibrary }
-
-class function TFb25ClientLibrary.GetProvider(ALibraryName: string): TFb25Provider;
-var
-  XLibraryName: Ansistring;
-  _ClientLibrary: IIBClientLibrary;
-begin
-  XLibraryName   := ALibraryName;
-  _ClientLibrary := IB_Intf.GetClientLibrary(XLibraryName);
-
-
-  if not Assigned(_ClientLibrary) then
-    raise Exception.Create('Cannot load client library');
-
-   Result := TFb25Provider.Create(_ClientLibrary);
-end;
-
 
 { TFb25Attachment }
 
@@ -611,17 +459,17 @@ begin
   FHandle := AHandle;
 end;
 
-procedure TFb25Attachment.DetachDatabase(AFbStatus: TFbStatus);
+procedure TFb25Attachment.DetachDatabase(AFbStatus: IFbStatus);
 begin
-  FClientLibrary.isc_detach_database((AFbStatus as TFb25Status).StatusVector, @FHandle);
+  FClientLibrary.isc_detach_database((AFbStatus as IFb25Status).StatusVector, @FHandle);
 end;
 
-procedure TFb25Attachment.DropDatabase(AFbStatus: TFbStatus);
+procedure TFb25Attachment.DropDatabase(AFbStatus: IFbStatus);
 begin
-  FClientLibrary.isc_drop_database((AFbStatus as TFb25Status).StatusVector, @FHandle);
+  FClientLibrary.isc_drop_database((AFbStatus as IFb25Status).StatusVector, @FHandle);
 end;
 
-procedure TFb25Attachment.GetActiveTransactions(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetActiveTransactions(AStatus: IFbStatus; AList: TStringList);
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
@@ -629,7 +477,7 @@ var
   L:integer;
 begin
   DBInfoCommand := AnsiChar(frb_info_active_transactions);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer);
 
   if not (AStatus.HasErrors) then
@@ -646,7 +494,7 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetAllModifications(AStatus: TFbStatus): integer;
+function TFb25Attachment.GetAllModifications(AStatus: IFbStatus): integer;
 var
   local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
   _DBInfoCommand: AnsiChar;
@@ -657,7 +505,7 @@ begin
   for j:=isc_info_insert_count to isc_info_delete_count do
   begin
     _DBInfoCommand:=AnsiChar(j);
-    FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
+    FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
                            FIBHugeLocalBufferLength, local_buffer);
 
     if not (AStatus.HasErrors) then
@@ -678,12 +526,12 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetAllocation(AStatus: TFbStatus): Long;
+function TFb25Attachment.GetAllocation(AStatus: IFbStatus): Long;
 begin
   Result := GetLongDBInfo(isc_info_allocation, AStatus);
 end;
 
-function TFb25Attachment.GetAttachCharset(AStatus: TFbStatus): integer;
+function TFb25Attachment.GetAttachCharset(AStatus: IFbStatus): integer;
 var
   Success:boolean ;
 begin
@@ -692,50 +540,50 @@ begin
   Result := -1
 end;
 
-function TFb25Attachment.GetAttachmentID(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetAttachmentID(AStatus: IFbStatus): LongInt;
 begin
   Result:= GetLongDBInfo(isc_info_attachment_id, AStatus);
 end;
 
-procedure TFb25Attachment.GetBackoutCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetBackoutCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_backout_count, AStatus, AList);
 end;
 
-function TFb25Attachment.GetBaseLevel(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetBaseLevel(AStatus: IFbStatus): LongInt;
 var
   local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_base_level);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                          FIBLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
     Result := FClientLibrary.isc_vax_integer(@local_buffer[4], 1);
 end;
 
-function TFb25Attachment.GetCurLogFileName(AStatus: TFbStatus): string;
+function TFb25Attachment.GetCurLogFileName(AStatus: IFbStatus): string;
 begin
   Result := GetStringDBInfo(isc_info_cur_logfile_name, AStatus);
 end;
 
-function TFb25Attachment.GetCurLogPartitionOffset(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetCurLogPartitionOffset(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_cur_log_part_offset, AStatus);
 end;
 
-function TFb25Attachment.GetCurrentMemory(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetCurrentMemory(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_current_memory, AStatus);
 end;
 
-function TFb25Attachment.GetDBFileName(AStatus: TFbStatus): Ansistring;
+function TFb25Attachment.GetDBFileName(AStatus: IFbStatus): Ansistring;
 var
   local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_db_id);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                          FIBLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
   begin
@@ -744,13 +592,13 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetDBImplementationClass(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetDBImplementationClass(AStatus: IFbStatus): LongInt;
 var
   local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_implementation);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                          FIBLocalBufferLength, local_buffer);
 
   if not (AStatus.HasErrors) then
@@ -759,13 +607,13 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetDBImplementationNo(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetDBImplementationNo(AStatus: IFbStatus): LongInt;
 var
   local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_implementation);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
   begin
@@ -773,14 +621,14 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetDBSiteName(AStatus: TFbStatus): Ansistring;
+function TFb25Attachment.GetDBSiteName(AStatus: IFbStatus): Ansistring;
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   p: PAnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_db_id);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
   begin
@@ -791,30 +639,30 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetDBSQLDialect(AStatus: TFbStatus): Word;
+function TFb25Attachment.GetDBSQLDialect(AStatus: IFbStatus): Word;
 var Success:boolean;
 begin
  Result:=GetProtectLongDBInfo(isc_info_db_SQL_dialect,Success, AStatus);
  if not Success then Result:=1
 end;
 
-procedure TFb25Attachment.GetDeleteCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetDeleteCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_delete_count, AStatus, AList);
 end;
 
-procedure TFb25Attachment.GetExpungeCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetExpungeCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_expunge_count, AStatus, AList);
 end;
 
-function TFb25Attachment.GetFBVersion(AStatus: TFbStatus): string;
+function TFb25Attachment.GetFBVersion(AStatus: IFbStatus): string;
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(frb_info_firebird_version);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer);
 
   if not (AStatus.HasErrors) then
@@ -829,29 +677,34 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetFetches(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetFetches(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_fetches, AStatus);
 end;
 
-function TFb25Attachment.GetForcedWrites(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetForcedWrites(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_forced_writes, AStatus);
 end;
 
-procedure TFb25Attachment.GetInsertCount(AStatus: TFbStatus; AList: TStringList);
+function TFb25Attachment.GetHandle: TISC_DB_HANDLE;
+begin
+  Result := FHandle;
+end;
+
+procedure TFb25Attachment.GetInsertCount(AStatus: IFbStatus; AList: TStringList);
 begin
   inherited;
   GetOperationCounts(isc_info_insert_count,AStatus, AList);
 end;
 
-function TFb25Attachment.GetIsRemoteConnect(AStatus: TFbStatus): boolean;
+function TFb25Attachment.GetIsRemoteConnect(AStatus: IFbStatus): boolean;
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_db_id);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
   begin
@@ -859,74 +712,74 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetLogFile(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetLogFile(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_logfile, AStatus);
 end;
 
-function TFb25Attachment.GetLongDBInfo(DBInfoCommand: Integer; AStatus: TFbStatus): Long;
+function TFb25Attachment.GetLongDBInfo(DBInfoCommand: Integer; AStatus: IFbStatus): Long;
 var Success:boolean;
 begin
   Result := GetProtectLongDBInfo(DBInfoCommand,Success, AStatus);
 end;
 
-function TFb25Attachment.GetMarks(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetMarks(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_marks, AStatus);
 end;
 
-function TFb25Attachment.GetMaxMemory(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetMaxMemory(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_max_memory, AStatus);
 end;
 
-function TFb25Attachment.GetNoReserve(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetNoReserve(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_no_reserve, AStatus);
 end;
 
-function TFb25Attachment.GetNumBuffers(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetNumBuffers(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_num_buffers, AStatus);
 end;
 
-function TFb25Attachment.GetNumWALBuffers(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetNumWALBuffers(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_num_wal_buffers, AStatus);
 end;
 
-function TFb25Attachment.GetODSMajorVersion(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetODSMajorVersion(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_ods_version, AStatus);
 end;
 
-function TFb25Attachment.GetODSMinorVersion(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetODSMinorVersion(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_ods_minor_version, AStatus);
 end;
 
-function TFb25Attachment.GetOldestActive(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetOldestActive(AStatus: IFbStatus): LongInt;
 var
   Success:boolean;
 begin
  Result := GetProtectLongDBInfo(frb_info_oldest_active,Success, AStatus);
 end;
 
-function TFb25Attachment.GetOldestSnapshot(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetOldestSnapshot(AStatus: IFbStatus): LongInt;
 var
   Success:boolean;
 begin
  Result:=GetProtectLongDBInfo(frb_info_oldest_snapshot,Success, AStatus);
 end;
 
-function TFb25Attachment.GetOldestTransaction(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetOldestTransaction(AStatus: IFbStatus): LongInt;
 var
   Success:boolean;
 begin
  Result:=GetProtectLongDBInfo(frb_info_oldest_transaction,Success, AStatus);
 end;
 
-function TFb25Attachment.GetOperationCounts(DBInfoCommand: Integer; AStatus: TFbStatus; var FOperation: TStringList):
+function TFb25Attachment.GetOperationCounts(DBInfoCommand: Integer; AStatus: IFbStatus; var FOperation: TStringList):
     TStringList;
 var
   local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
@@ -936,7 +789,7 @@ begin
   if FOperation = nil then FOperation := TStringList.Create;
   Result := FOperation;
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBHugeLocalBufferLength, local_buffer);
 
   if (not AStatus.HasErrors) then
@@ -959,73 +812,78 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetPageSize(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetPageSize(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_page_size, AStatus);
 end;
 
-function TFb25Attachment.GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean; AStatus: TFbStatus): Long;
+function TFb25Attachment.GetPHandle: PISC_DB_HANDLE;
+begin
+  Result := @FHandle;
+end;
+
+function TFb25Attachment.GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean; AStatus: IFbStatus): Long;
 var
   local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
   length: Integer;
   _DBInfoCommand: AnsiChar;
 begin
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBLocalBufferLength, local_buffer);
   Success:=local_buffer[0] = _DBInfoCommand;
   length := FClientLibrary.isc_vax_integer(@local_buffer[1], 2);
   Result := FClientLibrary.isc_vax_integer(@local_buffer[3], length);
 end;
 
-procedure TFb25Attachment.GetPurgeCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetPurgeCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_purge_count, AStatus, AList);
 end;
 
-procedure TFb25Attachment.GetReadIdxCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetReadIdxCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_read_idx_count, AStatus, AList);
 end;
 
-function TFb25Attachment.GetReadOnly(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetReadOnly(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_db_read_only, AStatus);
 end;
 
-function TFb25Attachment.GetReads(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetReads(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_reads, AStatus);
 end;
 
-procedure TFb25Attachment.GetReadSeqCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetReadSeqCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_read_seq_count,AStatus, AList);
 end;
 
-function TFb25Attachment.GetStringDBInfo(DBInfoCommand: Integer; AStatus: TFbStatus): string;
+function TFb25Attachment.GetStringDBInfo(DBInfoCommand: Integer; AStatus: IFbStatus): string;
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   _DBInfoCommand: AnsiChar;
 begin
   _DBInfoCommand := AnsiChar(DBInfoCommand);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @_DBInfoCommand,
                          FIBBigLocalBufferLength, local_buffer);
   local_buffer[4 + Int(local_buffer[3])] := #0;
   Result := PAnsiChar(@local_buffer[4]);
 end;
 
-function TFb25Attachment.GetSweepInterval(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetSweepInterval(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_sweep_interval, AStatus);
 end;
 
-procedure TFb25Attachment.GetUpdateCount(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetUpdateCount(AStatus: IFbStatus; AList: TStringList);
 begin
   GetOperationCounts(isc_info_update_count,AStatus, AList);
 end;
 
-procedure TFb25Attachment.GetUserNames(AStatus: TFbStatus; AList: TStringList);
+procedure TFb25Attachment.GetUserNames(AStatus: IFbStatus; AList: TStringList);
 var
   local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
   temp_buffer: array[0..FIBLocalBufferLength - 2] of AnsiChar;
@@ -1033,7 +891,7 @@ var
   i, user_length: Integer;
 begin
   DBInfoCommand := AnsiChar(isc_info_user_names);
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBHugeLocalBufferLength, local_buffer);
 
   if not (AStatus.HasErrors) then
@@ -1054,14 +912,14 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetVersion(AStatus: TFbStatus): string;
+function TFb25Attachment.GetVersion(AStatus: IFbStatus): string;
 var
   local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
   DBInfoCommand: AnsiChar;
 begin
   DBInfoCommand := AnsiChar(isc_info_version);
 
-  FClientLibrary.isc_database_info((AStatus as TFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
+  FClientLibrary.isc_database_info((AStatus as IFb25Status).StatusVector, @FHandle, 1, @DBInfoCommand,
                         FIBBigLocalBufferLength, local_buffer);
   if not (AStatus.HasErrors) then
   begin
@@ -1070,59 +928,83 @@ begin
   end;
 end;
 
-function TFb25Attachment.GetWALAverageGroupCommitSize(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALAverageGroupCommitSize(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_avg_grpc_size, AStatus);
 end;
 
-function TFb25Attachment.GetWALAverageIOSize(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALAverageIOSize(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_avg_io_size, AStatus);
 end;
 
-function TFb25Attachment.GetWALBufferSize(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALBufferSize(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_buffer_size, AStatus);
 end;
 
-function TFb25Attachment.GetWALCheckpointLength(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALCheckpointLength(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_ckpt_length, AStatus);
 end;
 
-function TFb25Attachment.GetWALCurCheckpointInterval(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALCurCheckpointInterval(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_cur_ckpt_interval, AStatus);
 end;
 
-function TFb25Attachment.GetWALGroupCommitWaitUSecs(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALGroupCommitWaitUSecs(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_grpc_wait_usecs, AStatus);
 end;
 
-function TFb25Attachment.GetWALNumCommits(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALNumCommits(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_num_commits, AStatus);
 end;
 
-function TFb25Attachment.GetWALNumIO(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALNumIO(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_num_io, AStatus);
 end;
 
-function TFb25Attachment.GetWALPrvCheckpointFilename(AStatus: TFbStatus): string;
+function TFb25Attachment.GetWALPrvCheckpointFilename(AStatus: IFbStatus): string;
 begin
   Result := GetStringDBInfo(isc_info_wal_prv_ckpt_fname, AStatus);
 end;
 
-function TFb25Attachment.GetWALPrvCheckpointPartOffset(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWALPrvCheckpointPartOffset(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_wal_prv_ckpt_poffset, AStatus);
 end;
 
-function TFb25Attachment.GetWrites(AStatus: TFbStatus): LongInt;
+function TFb25Attachment.GetWrites(AStatus: IFbStatus): LongInt;
 begin
   Result := GetLongDBInfo(isc_info_writes, AStatus);
+end;
+
+function TFb25Attachment.StartDistributedTransaction(AStatus: IFbStatus; AParams: IFbTransactionParams): IFbTransaction;
+var
+  StatusVector: PISC_STATUS;
+begin
+//  StatusVector  := (AStatus as IFb25Status).StatusVector;
+//
+//  if FClientLibrary.isc_start_multiple(StatusVector, @FHandle,
+//                                     0, PISC_TEB(pteb)), False) > 0)
+//
+//
+//  ClientLibrary.isc_attach_database(StatusVector, Length(FDBName), PAnsiChar(FDBName), @db_handle,
+//    (AParams as TFb25AttachmentParams).FDPBLength, (AParams as TFb25AttachmentParams).FDPB);
+//
+//  if not AStatus.HasErrors then
+//  begin
+//    Result := TFb25Attachment.Create(ClientLibrary, db_handle);
+//  end;
+end;
+
+function TFb25Attachment.StartTransaction(AStatus: IFbStatus; AParams: IFbTransactionParams): IFbTransaction;
+begin
+
 end;
 
 procedure InitDPBConstantsList;
@@ -1144,9 +1026,9 @@ begin
   end;
 end;
 
+
 initialization
   InitDPBConstantsList;
-
 finalization
   FreeAndNil(DPBConstants);
 

@@ -470,7 +470,7 @@ begin
  handle := DB.Handle;
  Success :=
   DB.ClientLibrary.isc_open_blob2(
-    StatusVector, @handle, @TR.Handle, @BlobHandle,@blob_id, 0, nil)=0;
+    StatusVector, @handle, TR.GetPHandle, @BlobHandle,@blob_id, 0, nil)=0;
  if Success  then
  with Result do 
  begin
@@ -956,7 +956,7 @@ end;
 function TFIBBlobStream.GetUpdateTRHandle: PISC_TR_HANDLE;
 begin
   if Assigned(FUpdateTransaction) then
-    Result := @FUpdateTransaction.Handle
+    Result := FUpdateTransaction.GetPHandle
   else
     Result := GetTRHandle
 end;
@@ -964,7 +964,7 @@ end;
 function TFIBBlobStream.GetTRHandle: PISC_TR_HANDLE;
 begin
   if Assigned(FTransaction) and Assigned(FTransaction.Handle) then
-   Result := @FTransaction.Handle
+   Result := FTransaction.GetPHandle
   else
    Result := nil
 end;

@@ -193,11 +193,15 @@
         <DCCReference Include="..\SIBAPI.pas"/>
         <DCCReference Include="..\SIBFIBEA.PAS"/>
         <DCCReference Include="..\SIBGlobals.pas"/>
-        <DCCReference Include="..\Interfaces\FbClasses.pas"/>
         <DCCReference Include="..\Interfaces\FbClientApi.pas"/>
         <DCCReference Include="..\Interfaces\Fb30\Fb30Classes.pas"/>
-        <DCCReference Include="..\Interfaces\Fb25\Fb25Classes.pas"/>
         <DCCReference Include="..\Interfaces\Fb30\Firebird.pas"/>
+        <DCCReference Include="..\Interfaces\FbInterfaces.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\Fb25Provider.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\Fb25Interfaces.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\Fb25Attachment.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\Fb25Transaction.pas"/>
+        <DCCReference Include="..\Interfaces\Fb25\Fb25Statement.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

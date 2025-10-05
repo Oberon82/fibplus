@@ -2,7 +2,7 @@ unit FbClientApi;
 
 interface
 uses
-  FbClasses;
+  FbInterfaces;
 
 type
 
@@ -10,16 +10,16 @@ type
   private
 
   public
-    class function GetProvider(ALibraryName: string; UseLegacyApi: Boolean): TFbProvider;
+    class function GetProvider(ALibraryName: string; UseLegacyApi: Boolean): IFbProvider;
   end;
 
 implementation
 uses
-  Fb30Classes, Fb25Classes;
+  Fb30Classes, Fb25Provider;
 
 { TFbClientApi }
 
-class function TFbClientApi.GetProvider(ALibraryName: string; UseLegacyApi: Boolean): TFbProvider;
+class function TFbClientApi.GetProvider(ALibraryName: string; UseLegacyApi: Boolean): IFbProvider;
 begin
   if UseLegacyApi then
     Result := TFb25ClientLibrary.GetProvider(ALibraryName)

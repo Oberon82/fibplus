@@ -27,7 +27,7 @@ unit fib;
 interface
 
 uses
-  SyncObjs,SysUtils, Classes, ibase,IB_Intf, ib_externals,Db,FIBPlatforms, FbClasses;
+  SyncObjs,SysUtils, Classes, ibase,IB_Intf, ib_externals,Db,FIBPlatforms;
 
 
 type

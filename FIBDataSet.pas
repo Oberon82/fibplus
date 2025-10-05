@@ -11933,7 +11933,7 @@ begin
   Exit;
  AutoStartUpdateTransaction;
  CheckUpdateTransaction;
- qf.FIBArray.SetFieldArrayValue(Value,Field, DBHandle,@UpdateTransaction.Handle)
+ qf.FIBArray.SetFieldArrayValue(Value,Field, DBHandle,UpdateTransaction.GetPHandle)
 end;
 
 function TFIBCustomDataSet.GetElementFromValue( Field:TField;
@@ -11963,7 +11963,7 @@ begin
  if qf.FIBArray=nil then Exit;
  AutoStartUpdateTransaction;
  CheckUpdateTransaction;
- qf.FIBArray.PutElementToField(Field,Value,Indexes,DBHandle,@UpdateTransaction.Handle);
+ qf.FIBArray.PutElementToField(Field,Value,Indexes,DBHandle,UpdateTransaction.GetPHandle);
 end;
 {$ENDIF}
 
