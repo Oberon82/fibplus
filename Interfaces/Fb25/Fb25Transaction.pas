@@ -190,14 +190,12 @@ end;
 
 procedure TFb25Transaction.Commit(AStatus: IFbStatus);
 begin
-  inherited;
-
+//  status := Call(IIbClientLibrary(MainDatabase).isc_commit_transaction(StatusVector, GetPHandle), False);
 end;
 
 procedure TFb25Transaction.CommitRetaining(AStatus: IFbStatus);
 begin
-  inherited;
-
+//  Call(IIbClientLibrary(MainDatabase).isc_commit_retaining(StatusVector, GetPHandle), True);
 end;
 
 function TFb25Transaction.GetHandle: TISC_TR_HANDLE;
@@ -213,13 +211,12 @@ end;
 procedure TFb25Transaction.Rollback(AStatus: IFbStatus);
 begin
   inherited;
-
+//  status := Call(IIbClientLibrary(MainDatabase).isc_rollback_transaction(StatusVector, GetPHandle), False)
 end;
 
 procedure TFb25Transaction.RollbackRetaining(AStatus: IFbStatus);
 begin
-  inherited;
-
+//  Call(IIbClientLibrary(MainDatabase).isc_rollback_retaining(StatusVector, GetPHandle), True);
 end;
 
 procedure InitTPBConstantsList;
