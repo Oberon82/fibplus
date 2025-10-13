@@ -315,7 +315,6 @@ resourcestring
   FalseStr='False';
 var
   FIBCS: TCriticalSection;
-//  hFIBTLGlobals: DWord_;
   pFIBLoginDialog :TpFIBLoginDialog;
 
 (* FIBAlloc acts like Realloc, except that it guarantees that
@@ -325,7 +324,7 @@ procedure FIBAlloc(var p; OldSize, NewSize: DWORD);
 procedure FIBError(ErrMess: TFIBClientError; const Args: array of const);
 procedure FIBErrorEx(const ErrMess:string; const Args: array of const);
 
-procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject);
+procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject; AStatusVector: PISC_STATUS);
 
 procedure RegisterErrorHandler(aErrorHandler:TComponent);
 procedure UnRegisterErrorHandler;
@@ -415,21 +414,19 @@ end;
  *  Examine the status vector, and raise an
  *  exception based on the current values in it.
  *)
-procedure IBError(ClientLibrary:IIbClientLibrary;Sender:TObject);
+procedure IBError(ClientLibrary: IIbClientLibrary; Sender: TObject; AStatusVector: PISC_STATUS);
 var
   sqlcode: Long;
-//  vFbSQLState : array[0..FB_sqlstate_bufSize-1] of AnsiChar;
   local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  vIBMessage:string;
-  vSQLMessage:string;
+  vIBMessage: string;
+  vSQLMessage: string;
   status_vector: PISC_STATUS;
   IBErrorMessages: TIBErrorMessages;
-
-  vEFIBInterBaseError                   : EFIBInterBaseError  ;
-  vRaiseExcept :boolean;
-  tmpStr  :Ansistring;
-  L:integer;
-  vSQLState:FIBByteString;
+  vEFIBInterBaseError: EFIBInterBaseError;
+  vRaiseExcept: boolean;
+  tmpStr: Ansistring;
+  L: integer;
+  vSQLState: FIBByteString;
 begin
   (*
    * Initialize the working user message.
@@ -437,13 +434,12 @@ begin
    * Get a local copy of the IBErrorMessages options.
    * Get the SQL error code.
    *)
-  status_vector := StatusVector;
+  status_vector := AStatusVector;
   IBErrorMessages := GetIBErrorMessages;
   sqlcode := ClientLibrary.isc_sqlcode(status_vector);
-//  FillChar(vFbSQLState,FB_sqlstate_bufSize,0);
-  vSQLState:=ClientLibrary.fb_sqlstate(status_vector);
-  vIBMessage:='';
-  vSQLMessage:='';
+  vSQLState := ClientLibrary.fb_sqlstate(status_vector);
+  vIBMessage := '';
+  vSQLMessage := '';
   (*
    * Maybe show the SQL Code
    *)
@@ -454,63 +450,71 @@ begin
   begin
     ClientLibrary.isc_sql_interprete(sqlcode, local_buffer, FIBBigLocalBufferLength);
 
-    vSQLMessage:=string(local_buffer);
+    vSQLMessage := string(local_buffer);
     vSQLMessage := ReplaceStr(vSQLMessage, '\n', '');
-    if Length(vSQLMessage)>0 then
+
+    if Length(vSQLMessage) > 0 then
     begin
-     if (vSQLMessage[1] >= 'a') and (vSQLMessage[1] <= 'z') then
-      Dec(vSQLMessage[1], 32);
-     if (vSQLMessage[Length(vSQLMessage)] <> '.') then
-      vSQLMessage := vSQLMessage + '.'+CLRF;
+      if (vSQLMessage[1] >= 'a') and (vSQLMessage[1] <= 'z') then
+        Dec(vSQLMessage[1], 32);
+
+      if (vSQLMessage[Length(vSQLMessage)] <> '.') then
+        vSQLMessage := vSQLMessage + '.' + CLRF;
     end;
   end;
   (*
    * Maybe show the interbase error messages
    *)
-  vIBMessage:='';
-  if (ShowSQLState  in IBErrorMessages) and (Length(vSQLState)>0) then
-    vIBMessage:='SQL error state ='+vSQLState+CLRF
+  vIBMessage := '';
+  if (ShowSQLState in IBErrorMessages) and (Length(vSQLState) > 0) then
+    vIBMessage := 'SQL error state =' + vSQLState + CLRF
   else
-    vIBMessage:='';
+    vIBMessage := '';
+
   if (ShowIBMessage in IBErrorMessages) then
   begin
-    L:= ClientLibrary.fb_Interpret(local_buffer, FIBHugeLocalBufferLength,@status_vector);
-    while  (L> 0) do
+    L := ClientLibrary.fb_Interpret(local_buffer, FIBHugeLocalBufferLength, @status_vector);
+    while (L > 0) do
     begin
-      SetLength(tmpStr,L);
-      Move(local_buffer[0],tmpStr[1],L);
+      SetLength(tmpStr, L);
+      Move(local_buffer[0], tmpStr[1], L);
 
-
-      if Length(tmpStr)>0 then
+      if Length(tmpStr) > 0 then
       begin
         if (tmpStr[1] >= 'a') and (tmpStr[1] <= 'z') then
-         Dec(tmpStr[1],32);
-        vIBMessage:=vIBMessage+tmpStr;
+          Dec(tmpStr[1], 32);
+        vIBMessage := vIBMessage + tmpStr;
+
         if (vIBMessage[Length(vIBMessage)] <> '.') then
           vIBMessage := vIBMessage + '.';
+
         vIBMessage := vIBMessage + CRLF;
       end;
-      L:= ClientLibrary.fb_Interpret(local_buffer, FIBHugeLocalBufferLength,@status_vector);
+      L := ClientLibrary.fb_Interpret(local_buffer, FIBHugeLocalBufferLength, @status_vector);
     end;
   end;
+
   (*
    * Finally raise the exception
    *)
-  vRaiseExcept:=true;
-  vEFIBInterBaseError:=EFIBInterBaseError.CreateEx(sqlcode,vIBMessage,vSQLMessage,'',Sender); // '' by IMS
-  vEFIBInterBaseError.FSQLState:=vSQLState;
+  vRaiseExcept := true;
+  vEFIBInterBaseError := EFIBInterBaseError.CreateEx(sqlcode, vIBMessage, vSQLMessage, '', Sender); // '' by IMS
+  vEFIBInterBaseError.FSQLState := vSQLState;
   try
-    if ErrorHandlerRegistered   then
-     IBErrorHandler.DoOnErrorEvent(Sender,vEFIBInterBaseError,vRaiseExcept);
+    if ErrorHandlerRegistered then
+      IBErrorHandler.DoOnErrorEvent(Sender, vEFIBInterBaseError, vRaiseExcept);
   except
-   vEFIBInterBaseError.Free;
-   raise;
+    vEFIBInterBaseError.Free;
+    raise;
   end;
+
   if vRaiseExcept then
-   raise vEFIBInterBaseError
+    raise vEFIBInterBaseError
   else
-   vEFIBInterBaseError.Free;
-end;                         
+    vEFIBInterBaseError.Free;
+end;
+
+
 
 
 (* Return the status vector for the current thread *)

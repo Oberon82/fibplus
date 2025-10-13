@@ -83,7 +83,20 @@ contains
   pFIBFieldsDescr in '..\pFIBFieldsDescr.pas',
   SIBAPI in '..\SIBAPI.pas',
   SIBFIBEA in '..\SIBFIBEA.PAS',
-  SIBGlobals in '..\SIBGlobals.pas';
+  SIBGlobals in '..\SIBGlobals.pas',
+  FbInterfaces in '..\Interfaces\FbInterfaces.pas',
+  Fb25Interfaces in '..\Interfaces\Fb25\Fb25Interfaces.pas',
+  Fb25MessageMetadata in '..\Interfaces\Fb25\Fb25MessageMetadata.pas',
+  Fb25Blob in '..\Interfaces\Fb25\Fb25Blob.pas',
+  Fb25Array in '..\Interfaces\Fb25\Fb25Array.pas',
+  Fb30Classes in '..\Interfaces\Fb30\Fb30Classes.pas',
+  Firebird in '..\Interfaces\Fb30\Firebird.pas',
+  Fb25Provider in '..\Interfaces\Fb25\Fb25Provider.pas',
+  Fb25Statement in '..\Interfaces\Fb25\Fb25Statement.pas',
+  Fb25Transaction in '..\Interfaces\Fb25\Fb25Transaction.pas',
+  Fb25Attachment in '..\Interfaces\Fb25\Fb25Attachment.pas',
+  FbClientApi in '..\Interfaces\FbClientApi.pas',
+  Fb25ResultSet in '..\Interfaces\Fb25\Fb25ResultSet.pas';
 
 end.
 

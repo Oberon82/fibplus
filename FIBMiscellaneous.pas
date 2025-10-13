@@ -31,7 +31,7 @@ uses
  {$ENDIF}
 
   SysUtils,SyncObjs, Classes, ibase,IB_Intf,IB_Externals,
-  DB, fib, FIBDatabase, FIBQuery, StdFuncs,IB_ErrorCodes,FIBPlatforms ;
+  DB, fib, FIBDatabase, FIBQuery, StdFuncs,IB_ErrorCodes,FIBPlatforms, Fb25Interfaces;
 
 const
   DefaultBlobSegmentSize = High(Word);
@@ -332,7 +332,7 @@ try
           Transaction.StartTransaction;
         vFileIsValid:=
          BlobExist(Database.ClientLibrary,
-          Database.Handle,Transaction.Handle,tmpBlobId
+          (Database.Handle as IFb25Attachment).GetPHandle^, Transaction.GetPHandle^,tmpBlobId
          );
        end;
      end;
@@ -468,7 +468,7 @@ begin
  BlobHandle:=nil;
  Success :=
   DB.ClientLibrary.isc_open_blob2(
-   StatusVector, @DB.Handle, @TR.Handle, @BlobHandle,@blob_id, 0, nil)=0;
+   StatusVector, (Db.Handle as IFb25Attachment).GetPHandle, TR.GetPHandle, @BlobHandle,@blob_id, 0, nil)=0;
  if Success  then
  with Result do 
  begin
@@ -498,7 +498,7 @@ begin
 
   if ClientLibrary.isc_blob_info(StatusVector, hBlobHandle, 4, @items[0], SizeOf(results),
                     @results[0]) > 0 then
-    IBError(ClientLibrary,nil);
+    IBError(ClientLibrary,nil, StatusVector);
 
   i := 0;
   while (i < SizeOf(results)) and (results[i] <> AnsiChar(isc_info_end)) do
@@ -547,7 +547,7 @@ begin
                StatusVector, hBlobHandle, @BytesRead, SegLen,
                LocalBuffer) = 0) or
             (StatusVectorArray[1] = isc_segment)) then
-      IBError(ClientLibrary,nil);
+      IBError(ClientLibrary,nil, StatusVector);
     Inc(LocalBuffer, BytesRead);
     Inc(AllReadBytes,BytesRead);
     if Assigned(CallBack) then
@@ -604,7 +604,7 @@ begin
        Exit;
     end
    else
-    IBError(ClientLibrary,nil);
+    IBError(ClientLibrary,nil, StatusVector);
    end;
   end;
 end;
@@ -627,7 +627,7 @@ begin
       SegLen := BlobSize - CurPos;
     if ClientLibrary.isc_put_segment(StatusVector, hBlobHandle, SegLen,
          PAnsiChar(@Buffer[CurPos])) > 0 then
-      IBError(ClientLibrary,nil);
+      IBError(ClientLibrary,nil, StatusVector);
     Inc(CurPos, SegLen);
     if Assigned(CallBack) then
      CallBack(BlobSize,CurPos,Stop);
@@ -761,12 +761,12 @@ end;
 
 function TFIBBlobStream.Call(ErrCode: ISC_STATUS; RaiseError: Boolean): ISC_STATUS;
 begin
-  Result := 0;
-  if Transaction <> nil then
-    Result := Transaction.Call(ErrCode, RaiseError)
-  else
-  if RaiseError and (ErrCode > 0) then
-    IBError(FDatabase.ClientLibrary,Self);
+//  Result := 0;
+//  if Transaction <> nil then
+//    Result := Transaction.CheckStatus(StatusVector, RaiseError)
+//  else
+//  if RaiseError and (ErrCode > 0) then
+//    IBError(FDatabase.ClientLibrary,Self, StatusVector);
 end;
 
 procedure TFIBBlobStream.CheckReadable;
@@ -784,7 +784,7 @@ procedure TFIBBlobStream.CloseBlob;
 begin
   if (FBlobHandle <> nil) and
      (Call(FDatabase.ClientLibrary.isc_close_blob(StatusVector, @FBlobHandle), False) > 0) then
-    IBError(FDatabase.ClientLibrary,Self);
+    IBError(FDatabase.ClientLibrary,Self, StatusVector);
   FBlobHandle:=nil;
   FBlobInitialized:=false;
 end;
@@ -927,9 +927,9 @@ end;
 function TFIBBlobStream.GetDBHandle: PISC_DB_HANDLE;
 begin
   if Assigned(FDatabase)  and Assigned(FDatabase.Handle) then
-   Result := @FDatabase.Handle
+   Result := (FDatabase.Handle as IFb25Attachment).GetPHandle
   else
-   Result :=nil;  
+   Result :=nil;
 end;
 
 function TFIBBlobStream.GetTransaction: TFIBTransaction;
@@ -949,7 +949,7 @@ end;
 function TFIBBlobStream.GetUpdateTRHandle: PISC_TR_HANDLE;
 begin
   if Assigned(FUpdateTransaction) then
-    Result := @FUpdateTransaction.Handle
+    Result := FUpdateTransaction.GetPHandle
   else
     Result := GetTRHandle
 end;
@@ -957,7 +957,7 @@ end;
 function TFIBBlobStream.GetTRHandle: PISC_TR_HANDLE;
 begin
   if Assigned(FTransaction) and Assigned(FTransaction.Handle) then
-   Result := @FTransaction.Handle
+   Result := FTransaction.GetPHandle
   else
    Result := nil
 end;
@@ -1589,7 +1589,7 @@ begin
          Exit;
       end
      else
-      IBError(FDatabase.ClientLibrary,nil);
+      IBError(FDatabase.ClientLibrary,nil, StatusVector);
      end;
 
     end;

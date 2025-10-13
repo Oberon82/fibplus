@@ -612,9 +612,8 @@ begin
        if FIBBases[i].Owner is TFIBQuery then
         with THackFIBQuery(FIBBases[i].Owner) do
         begin
-          FHandle:=nil;
+          FHandle := nil;
           Close;
-          FPrepared:=False;
         end;
      except
  //      raise;

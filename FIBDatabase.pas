@@ -29,18 +29,10 @@ interface
 uses
  SysUtils, SyncObjs,Classes,ibase, IB_Intf, IB_Externals,
  pFIBProps,IBBlobFilter, Fib, pFIBEventLists,StdFuncs,
- pFIBInterfaces, FIBPlatforms
+ pFIBInterfaces, FIBPlatforms, FbInterfaces, Fb25Interfaces, FbClientApi
   {$IFDEF D6+} ,Variants{$ENDIF}
    {$IFDEF D_XE2}
     ,System.UITypes
-   {$ENDIF}
-   {$IFDEF FIBPLUS_TRIAL}
-    ,Windows
-    {$IFDEF D_XE2}
-     ,VCL.Dialogs
-    {$ELSE}
-     ,Dialogs
-    {$ENDIF}
    {$ENDIF}
  {$IFDEF DIRECT_USE_DB_LOGIN_FORM}
    ,FIBDBLoginDlg      //IS GUI
@@ -125,15 +117,15 @@ type
 
     function GetBusy: boolean;
   protected
-    FClientLibrary      :IIBClientLibrary;
-    FFIBBases            : TList;                        // TFIBBases attached.
+    FProvider           : IFbProvider;
+    FFIBBases           : TList;                        // TFIBBases attached.
     FTransactions       : TList;                        // TFIBTransactions attached.
     FDBName             : Ansistring;                       // DB's name
     FDBParams           : TDBParams;                     // "Pretty" Parameters to database
     FDBParamsChanged    : Boolean;                      // Flag to determine if DPB must be regenerated
     FDPB                : PAnsiChar;                        // Parameters to DB as passed to IB.
     FDPBLength          : Short;                        // Length of parameter buffer
-    FHandle             : TISC_DB_HANDLE;               // DB's handle
+    FHandle             : IFbAttachment;                // DB's handle
     FHandleIsShared     : Boolean;                      // Is the handle shared with another DB?
     FUseLoginPrompt     : Boolean;                      // Show a default login prompt?
     FOnConnect          : TNotifyEvent;                 // Upon successful connection...
@@ -184,6 +176,7 @@ type
     function GetDatabaseName: string;
     function GetFIBBase(Index: Integer): TFIBBase;      // Get the indexed FIBBase.
     function GetFIBBasesCount: Integer;                  // Get the number of FIBBase connected.
+    function GetHandle: TISC_TR_HANDLE;
     function GetDBParamByDPB(const Idx: Integer): string;
     function GetTimeout: Cardinal;                       // Get the timeout
     function GetTransaction(Index: Integer): TFIBTransaction;
@@ -199,7 +192,7 @@ type
     procedure SetDefaultTransaction(Value: TFIBTransaction);
     procedure SetDefaultUpdateTransaction(Value: TFIBTransaction);
     procedure CreateTimeoutTimer;
-    procedure SetHandle(Value: TISC_DB_HANDLE);
+    procedure SetHandle(Value: IFbAttachment);
     procedure SetTimeout(Value: Cardinal);
     procedure SetDesignDBOptions(Value:TDesignDBOptions);
     procedure TimeoutConnection(Sender: TObject);
@@ -244,7 +237,7 @@ type
     function GetUpdatesCount(const TableName:string):integer;
     function GetDeletesCount(const TableName:string):integer;
 
-    function GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
+//    function GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
     function GetAllModifications:integer;
 
     function GetLogFile: Long;                   // isc_info_log_file
@@ -262,10 +255,11 @@ type
     function GetWALNumCommits: Long;             // isc_info_wal_num_commits
     function GetWALAverageGroupCommitSize: Long; // isc_info_wal_avg_grpc_size
 
-    function GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean): Long;
-    function GetStringDBInfo(DBInfoCommand: Integer): string;
-    function GetLongDBInfo(DBInfoCommand: Integer): Long;
+//    function GetProtectLongDBInfo(DBInfoCommand: Integer;var Success:boolean): Long;
+//    function GetStringDBInfo(DBInfoCommand: Integer): string;
+//    function GetLongDBInfo(DBInfoCommand: Integer): Long;
     function GetAttachmentID  :Long;
+    function GetPHandle: PISC_DB_HANDLE;
 
 //Firebird Info
     function GetActiveTransactions: TStringList; // frb_info_active_transactions
@@ -282,11 +276,14 @@ type
     FServerBuild:integer;
     FNeedUTFDecodeDDL:boolean;
     FIsFB21OrMore :boolean;
+    FUseLegacyApi: Boolean;
     procedure FillServerVersions;
     function GetServerMajorVersion: integer;
     function GetServerMinorVersion: integer;
     function GetServerRelease: integer;
     function GetServerBuild: integer;
+    procedure SetUseLegacyApi(const Value: Boolean);
+    function GetClientLibrary: IIbClientLibrary;
   protected
     function GetInternalTransaction:TFIBTransaction; // friend for pFIBDataInfo
     property StreammedConnectFail:boolean read FStreammedConnectFail;
@@ -344,7 +341,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function   Call(ErrCode: ISC_STATUS; RaiseError: Boolean): ISC_STATUS;
+    procedure CheckStatus(Status: IFbStatus; RaiseError: Boolean);
 
     procedure CheckActive(TryReconnect:boolean=False);                              // Raise error if DB is inactive
     procedure CheckInactive;                            // Raise error if DB is active
@@ -411,7 +408,7 @@ type
     property FIBBaseCount: Integer read GetFIBBasesCount;
     property FIBBases[Index: Integer]: TFIBBase  read GetFIBBase;
 
-    property Handle: TISC_DB_HANDLE read FHandle write SetHandle;
+    property Handle: IFbAttachment read FHandle write SetHandle;
     property HandleIsShared: Boolean read FHandleIsShared;
     property TransactionCount: Integer read GetTransactionCount;
     property FirstActiveTransaction:TFIBTransaction read GetFirstActiveTransaction;
@@ -525,7 +522,7 @@ type
 
     function EasyFormatsStr :boolean;
     property StoreConnected :boolean read GetStoreConnected;
-    property ClientLibrary:IIbClientLibrary read FClientLibrary implements IIbClientLibrary;
+    property ClientLibrary:IIbClientLibrary read GetClientLibrary implements IIbClientLibrary; //TODO: remove
     property SQLStatisticsMaker:ISQLStatMaker read FSQLStatMaker write SetSQLStatMaker;
 
   published
@@ -582,6 +579,7 @@ type
     {$ENDIF}
   published
     property MemoSubtypes: string read GetMemoSubtypes write SetMemoSubtypes;
+    property UseLegacyApi: Boolean read FUseLegacyApi write SetUseLegacyApi;
   end;
 
   (* TFIBTransaction *)
@@ -606,7 +604,7 @@ type
     FDatabases          : TList;                        // TDatabases in transaction.
     FFIBBases           : TList;                        // TFIBBases  attached.
     FDefaultDatabase    : TFIBDatabase;                 // just like DefaultTransaction in FIBDatabase
-    FHandle             : TISC_TR_HANDLE;               // TR's handle
+    FHandle             : IFBTransaction;               // TR's handle
     FHandleIsShared     : Boolean;
     FOnTimeout          : TNotifyEvent;                 // When the transaction times out...
     FStreamedActive     : Boolean;
@@ -647,7 +645,7 @@ type
     procedure Loaded; override;
     procedure SetActive(Value: Boolean);
     procedure SetDefaultDatabase(Value: TFIBDatabase);
-    procedure SetHandle(Value: TISC_TR_HANDLE);
+    procedure SetHandle(Value: IFBTransaction);
     procedure SetTimeout(Value: Cardinal);               // Set the timeout
     procedure SetTRParams(Value: TStrings);
     procedure TimeoutTransaction(Sender: TObject);
@@ -683,10 +681,11 @@ type
     procedure RemoveDatabase(Idx: Integer);
     procedure ReplaceDatabase(dbOld,dbNew: TFIBDatabase);
 
-
+    function GetPHandle: PISC_TR_HANDLE;
     procedure OnDatabaseDisconnecting(DB: TFIBDatabase);
 
-    function  Call(ErrCode: ISC_STATUS; RaiseError: Boolean): ISC_STATUS;
+    procedure CheckStatus(AStatus: IFbStatus; RaiseError: Boolean);
+
     procedure CheckDatabasesInList;        // Raise error if no databases in list.
     procedure CheckInTransaction;          // Raise error if not in transaction
     procedure CheckNotInTransaction;       // Raise error if in transaction
@@ -711,7 +710,7 @@ type
     property FIBBaseCount: Integer read GetFIBBasesCount;
     property FIBBases[Index: Integer]: TFIBBase  read GetFIBBase;
 
-    property Handle: TISC_TR_HANDLE read FHandle write SetHandle;
+    property Handle: IFBTransaction read FHandle write SetHandle;
     property HandleIsShared: Boolean read FHandleIsShared;
     property InTransaction: Boolean read GetInTransaction;
 //    property TPB: PChar read FTPB;
@@ -950,7 +949,7 @@ constructor TFIBDatabase.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FLibraryName  := IBASE_DLL;
-  FClientLibrary:= nil;
+  FProvider := nil;
   FFIBBases                            := TList.Create;
   FTransactions                        := TList.Create;
   FDBName                              := '';
@@ -1079,7 +1078,7 @@ begin
    FBlobSwapSupport.Free;
    FGenerators.Free;
    FMemoSubtypes.Free;
-   FClientLibrary:=nil;
+   FProvider:=nil;
    inherited Destroy;
 end;
 
@@ -1090,7 +1089,7 @@ begin
   if FLibraryName<>LibName then
   begin
     FLibraryName  :=LibName;
-    FClientLibrary:=nil;
+    FProvider:=nil;
     FClientLibLoaded := False;
 {    if Length(FLibraryName)>0 then
      LoadLibrary}
@@ -1141,10 +1140,10 @@ end;
 
 function TFIBDatabase.LibraryFilePath:string;
 begin
-  if Assigned(FClientLibrary) then
-   Result:=FClientLibrary.LibraryFilePath
+  if Assigned(FProvider) then
+   Result := FProvider.LibraryFilePath
   else
-   Result:=FLibraryName
+   Result := FLibraryName
 end;
 
 
@@ -1167,22 +1166,6 @@ function  TFIBDatabase.GetStoreConnected:boolean;
 begin
   Result:=Connected and
    (ddoStoreConnected in FDesignDBOptions)
-end;
-
-function TFIBDatabase.Call(ErrCode: ISC_STATUS;
-  RaiseError: Boolean): ISC_STATUS;
-begin
-  Set8087CW(Default8087CW);
-  Result := ErrCode;
-//  FCanTimeout := False;
-  if Assigned(FTimer) and FTimer.Enabled then
-  begin
-   FTimer.Enabled:=False;
-   FTimer.Enabled:=True;
-   FLastActiveTime:=FIBGetTickCount;
-  end;
-  if RaiseError and (ErrCode > 0) then
-    IBError(Self,Self);
 end;
 
 procedure TFIBDatabase.CheckActive(TryReconnect:boolean=False);
@@ -1218,6 +1201,28 @@ procedure TFIBDatabase.CheckInactive;
 begin
   if FHandle <> nil then
     FIBError(feDatabaseOpen, [nil]);
+end;
+
+procedure TFIBDatabase.CheckStatus(Status: IFbStatus; RaiseError: Boolean);
+var
+  tmpStatus: IFb25Status;
+begin
+  Set8087CW(Default8087CW);
+
+  //  FCanTimeout := False;
+  if Assigned(FTimer) and FTimer.Enabled then
+  begin
+   FTimer.Enabled:=False;
+   FTimer.Enabled:=True;
+   FLastActiveTime:=FIBGetTickCount;
+  end;
+
+  if RaiseError and (Status.HasErrors) then
+  begin
+    tmpStatus := Status as IFb25Status;
+
+    IBError(Self,Self, tmpStatus.StatusVector); /// TODO: Use status for error message
+  end;
 end;
 
 procedure TFIBDatabase.CheckDatabaseName;
@@ -1411,21 +1416,28 @@ end;
 
 procedure TFIBDatabase.CreateDatabase;
 var
-  tr_handle: TISC_TR_HANDLE;
+  dbParams: IFbAttachmentParams;
+  status  : IFbStatus;
 begin
   // Create database interprets the DBParams string list
   // as mere text. It makes it extremely simple to do this way.
   CheckInactive; // Make sure the database ain't connected.
   LoadLibrary;
-  tr_handle := nil;
-  Call(
-    FClientLibrary.isc_dsql_execute_immediate(StatusVector, @FHandle, @tr_handle, 0,
-     PAnsiChar('CREATE DATABASE ''' + FDBName + ''' ' +AnsiString(DBParams.Text)
-    ), SQLDialect, nil),
-    True
-  );
 
-  FServerMajorVersion:=-1; 
+  dbParams := FProvider.GetAttachmentParams;
+  status   := FProvider.GetStatus;
+  FHandle := FProvider.CreateDatabase(status, FDBName, dbParams); //TODO: Support dialect and username
+  CheckStatus(status, True);
+
+//  tr_handle := nil;
+//  Call(
+//    ClientLibrary.isc_dsql_execute_immediate(StatusVector, @FHandle, @tr_handle, 0,
+//     PAnsiChar('CREATE DATABASE ''' + FDBName + ''' ' +AnsiString(DBParams.Text)
+//    ), SQLDialect, nil),
+//    True
+//  );
+
+  FServerMajorVersion:=-1;
   FServerMinorVersion:=-1;
   FServerBuild       :=-1;
 
@@ -1456,8 +1468,9 @@ procedure TFIBDatabase.DropDatabase;
 begin
   CheckActive;
   LoadLibrary;
-  Call(FClientLibrary.isc_drop_database(StatusVector, @FHandle), True);
-  FHandle:=nil
+  FHandle.DropDatabase;
+  CheckStatus(FHandle.Status, True);
+  FHandle := nil;
 end;
 
 // Set up the FDPBBuffer correctly.
@@ -1480,6 +1493,11 @@ end;
 procedure TFIBDatabase.ForceClose;
 begin
   InternalClose(True);
+end;
+
+function TFIBDatabase.GetClientLibrary: IIbClientLibrary;
+begin
+  Result := (FProvider as IFb25Provider).GetClientLibrary;
 end;
 
 function TFIBDatabase.GetConnected: Boolean;
@@ -1635,11 +1653,17 @@ begin
    *)
 
     try
-      if (not HandleIsShared) and
-         (Call(FClientLibrary.isc_detach_database(StatusVector, @FHandle), not Force) > 0) and
-         (not Force)
+      if (not HandleIsShared) then
+      begin
+        FHandle.DetachDatabase;
+        CheckStatus(FHandle.Status, not Force);
+      end;
+
+      if (not HandleIsShared) and FHandle.Status.HasErrors and (not Force)
       then
-        IbError(Self,Self)
+      begin
+        IbError(Self,Self, (FHandle.Status as IFb25Status).StatusVector);
+      end
       else
       begin
         FHandle := nil;
@@ -1663,9 +1687,9 @@ begin
   if FFIBBases[i] <> nil then
     FIBBases[i].FOnDatabaseDisconnected;
   DoAfterDisconnect;
+
  if Assigned(FSQLLogger) then
   FSQLLogger.WriteData(CmpFullName(Self),'Disconnect','',lfConnect);
-
 end;
 
 
@@ -1839,95 +1863,109 @@ end;
  *)
 
 
-procedure TFIBDatabase.Open(RaiseExcept:boolean = True);
+procedure TFIBDatabase.Open(RaiseExcept: boolean = True);
 const
   S_OK = 0;
-
 var
-  DPB: AnsiString;
-  isc_res:ISC_STATUS;
   i: Integer;
-  SV: PISC_STATUS;
+  attachmentParams: IFbAttachmentParams;
+  tmpStatus: IFbStatus;
 begin
   // isc_res:=0;
   (*
    * Check that the database is *not* active, and that it
    * has a database name
    *)
-  FServerMajorVersion:=-1;
-  FServerMinorVersion:=-1;
-  FServerBuild       :=-1;
+  FServerMajorVersion := -1;
+  FServerMinorVersion := -1;
+  FServerBuild := -1;
   vConnectCS.Acquire;
 //  EnterCriticalSection(vConnectCS);
   try
-   CheckInactive;
-   CheckDatabaseName;
-   LoadLibrary;
+    CheckInactive;
+    CheckDatabaseName;
+    LoadLibrary;
   (*
    * Use the canned login prompt if requested.
    *)
-  for i := 0 to FFIBBases.Count - 1 do
-  begin
-     if FFIBBases[i] <> nil then
-       FIBBases[i].FOnDatabaseConnecting;
-  end;
+    for i := 0 to FFIBBases.Count - 1 do
+    begin
+      if FFIBBases[i] <> nil then
+        FIBBases[i].FOnDatabaseConnecting;
+    end;
 
-  if FUseLoginPrompt and not Login then
-    FIBError(feOperationCancelled, [nil]);
+    if FUseLoginPrompt and not Login then
+      FIBError(feOperationCancelled, [nil]);
      (*
       * Generate a new DPB if necessary
       *)
-     if FDBParamsChanged then
-     begin
-       FDBParamsChanged := False;
-       GenerateDPB(FDBParams, DPB, FDPBLength,FConnectParams.IsFirebird);
-       FIBAlloc(FDPB, 0, FDPBLength);
-       Move(DPB[1], FDPB[0], FDPBLength);
-     end;
+//     if FDBParamsChanged then
+//     begin
+//       FDBParamsChanged := False;
+//       GenerateDPB(FDBParams, DPB, FDPBLength,FConnectParams.IsFirebird);
+//       FIBAlloc(FDPB, 0, FDPBLength);
+//       Move(DPB[1], FDPB[0], FDPBLength);
+//     end;
+
      (*
       * Attach to the database, and raise an IB error if
       * the statement doesn't execute correctly.
       *)
-     SV:=StatusVector;
-     isc_res:=Call(FClientLibrary.isc_attach_database(SV, Length(FDBName),
-                            PAnsiChar(FDBName), @FHandle,
-                            FDPBLength, FDPB), False);
+
+    tmpStatus := FProvider.GetStatus;
+    attachmentParams := FProvider.GetAttachmentParams;
+    attachmentParams.GenerateParams(FDBParams, FConnectParams.IsFirebird);
+    FHandle := FProvider.AttachDatabase(tmpStatus, FDBName, attachmentParams);
+
+//     SV:=StatusVector;
+//     isc_res:=Call(ClientLibrary.isc_attach_database(SV, Length(FDBName),
+//                            PAnsiChar(FDBName), @FHandle,
+//                            FDPBLength, FDPB), False);
   finally
-   vConnectCS.Release
+    vConnectCS.Release
 //   LeaveCriticalSection(vConnectCS);
   end;
 
-  if isc_res > 0 then
+  if tmpStatus.HasErrors then
   begin
     FHandle := nil;
     if RaiseExcept then
-     IbError(Self,Self)
+    begin
+      IbError(Self, Self, (tmpStatus as IFb25Status).StatusVector); // TODO: Remove
+    end
     else
-     Exit;
+      Exit;
   end;
-  vInternalTransaction.Timeout      :=1000;  
-  FStreammedConnectFail:=False;
+  vInternalTransaction.Timeout := 1000;
+  FStreammedConnectFail := False;
   AttachmentID;
-  DPB:=FDPB;
+//  DPB:=FDPB;
 
 {$IFNDEF NO_MONITOR}
-  if MonitoringEnabled  then
-   if MonitorHook<>nil then
-    MonitorHook.DBConnect(Self);
+  if MonitoringEnabled then
+    if MonitorHook <> nil then
+      MonitorHook.DBConnect(Self);
 {$ENDIF}
-  FDifferenceTime:=0;
-  if DBSQLDialect<SQLDialect then FSQLDialect:=DBSQLDialect;
+  FDifferenceTime := 0;
+
+  if DBSQLDialect < SQLDialect then
+    FSQLDialect := DBSQLDialect;
+
   if FSynchronizeTime and not (csDesigning in ComponentState) then
-   FDifferenceTime:=Now-GetServerTime;
-  FConnectType:=0;
+    FDifferenceTime := Now - GetServerTime;
+
   DoOnConnect;
+
   for i := 0 to FFIBBases.Count - 1 do
   begin
-    if not Connected then  Break;
-      FIBBases[i].FOnDatabaseConnected;
+    if not Connected then
+      Break;
+
+    FIBBases[i].FOnDatabaseConnected;
   end;
- if Assigned(FSQLLogger) then
-  FSQLLogger.WriteData(CmpFullName(Self),'Connect','',lfConnect);
+
+  if Assigned(FSQLLogger) then
+    FSQLLogger.WriteData(CmpFullName(Self), 'Connect', '', lfConnect);
 end;
 
 function  TFIBDatabase.GetServerTime:TDateTime;
@@ -2010,8 +2048,6 @@ begin
 end;
 
 procedure TFIBDatabase.LoadLibrary;
-var
-  XLibraryName: Ansistring;
 begin
    {$IFDEF D_XE2}
        {$IFDEF WIN64}
@@ -2019,14 +2055,8 @@ begin
           FLibraryName:=FLibraryName64;
        {$ENDIF}
    {$ENDIF}
-   if not FClientLibLoaded then
-   begin
-    XLibraryName:=FLibraryName;
-    FClientLibrary:=IB_Intf.GetClientLibrary(XLibraryName);
-    FClientLibLoaded:=Assigned(FClientLibrary);
-   end;
-   if not FClientLibrary.LibraryLoaded then
-    FClientLibrary.LoadIBLibrary
+
+   FProvider := TFbClientApi.GetProvider(FLibraryName, UseLegacyApi);
 end;
 
 procedure TFIBDatabase.SetConnected(Value: Boolean);
@@ -2147,7 +2177,17 @@ begin
   end;
 end;
 
-procedure TFIBDatabase.SetHandle(Value: TISC_DB_HANDLE);
+procedure TFIBDatabase.SetUseLegacyApi(const Value: Boolean);
+begin
+  if (FUseLegacyApi <> Value) then
+  begin
+    if Connected  then
+      raise Exception.Create('Cannot change UseLegacyApi while Connected');
+
+    FUseLegacyApi := Value;
+  end;
+end;
+procedure TFIBDatabase.SetHandle(Value: IFbAttachment);
 begin
   if HandleIsShared then
     Close
@@ -2198,7 +2238,7 @@ begin
  LoadLibrary;
  GetMem(p,100);
  try
-  FClientLibrary.isc_get_client_version(p);
+  ClientLibrary.isc_get_client_version(p);
   Result:=p;
  finally
   FreeMem(p,100)
@@ -2208,13 +2248,13 @@ end;
 function  TFIBDatabase.ClientMajorVersion:integer;
 begin
   LoadLibrary;
-  Result:=FClientLibrary.ClientVersion
+  Result:=ClientLibrary.ClientVersion
 end;
 
 function  TFIBDatabase.ClientMinorVersion:integer;
 begin
   LoadLibrary;
-  Result:=FClientLibrary.ClientMinorVersion
+  Result:=ClientLibrary.ClientMinorVersion
 end;
 
 function  TFIBDatabase.GetIsFirebirdConnect :boolean;
@@ -2340,13 +2380,15 @@ end;
 procedure TFIBDatabase.EnableCancelOperations;
 begin
  CheckActive;
- Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_enable),True);
+ FHandle.CancelOperation(fb_cancel_enable);
+ CheckStatus(FHandle.Status, True);
 end;
 
 procedure TFIBDatabase.DisableCancelOperations;
 begin
  CheckActive;
- Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_disable),True);
+ FHandle.CancelOperation(fb_cancel_disable);
+ CheckStatus(FHandle.Status, True);
 end;
 
 function  TFIBDatabase.CanCancelOperationFB21:boolean;
@@ -2388,9 +2430,12 @@ end;
 
 procedure TFIBDatabase.RaiseCancelOperations;
 begin
- CheckActive;
- if Busy then
-  Call(FClientLibrary.fb_cancel_operation(StatusVector,@FHandle,fb_cancel_raise),True);
+  CheckActive;
+  if Busy then
+  begin
+    FHandle.CancelOperation(fb_cancel_raise);
+    CheckStatus(FHandle.Status, True);
+  end;
 end;
 
 
@@ -2439,123 +2484,67 @@ end;
 (* Database Info procedures -- Advanced stuff (translated from isc_database_info) *)
 function TFIBDatabase.GetAllocation: Long;
 begin
-  Result := GetLongDBInfo(isc_info_allocation);
+  CheckActive;
+  Result := FHandle.GetAttachmentID;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetBaseLevel: Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_base_level);
-  Call(ClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  Result := FHandle.GetBaseLevel;
 end;
 
 function TFIBDatabase.GetDBFileName: Ansistring;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   if FDBFileName='' then
   begin
     CheckActive;
-    DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                           FIBLocalBufferLength, local_buffer), True);
-    local_buffer[5 + Int(local_buffer[4])] := #0;
-    Result := PAnsiChar(@local_buffer[5]);
-    FDBFileName := Result
+    Result := FHandle.GetDBFileName;
+    CheckStatus(FHandle.Status, True);
+    FDBFileName := Result;
   end
   else
     Result:=FDBFileName
 end;
 
 function TFIBDatabase.GetDBSiteName: Ansistring;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  p: PAnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_db_id);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  p := @local_buffer[5 + Int(local_buffer[4])]; // DBSiteName Length
-  p := p + Int(p^) + 1;                         // End of DBSiteName
-  p^ := #0;                                     // Null it.
-  Result := PAnsiChar(@local_buffer[6 + Int(local_buffer[4])]);
+  Result := FHandle.GetDBSiteName;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetIsRemoteConnect: boolean;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  if FConnectType=0 then
-  begin
-    DBInfoCommand := AnsiChar(isc_info_db_id);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                          FIBLocalBufferLength, local_buffer), True);
-    FConnectType:=Int(local_buffer[3]);
-  end;
-  Result:=FConnectType=4
+  Result := FHandle.GetIsRemoteConnect;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetActiveTransactions: TStringList; // isc_info_active_transactions
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
-  i:integer;
-  L:integer;
 begin
   CheckActive;
   if FActiveTransactions=nil then FActiveTransactions:=TStringList.Create;
   Result:=FActiveTransactions;
   FActiveTransactions.Clear;
 
-  DBInfoCommand := AnsiChar(frb_info_active_transactions);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  i:=0;
-
-  while local_buffer[i] = AnsiChar(frb_info_active_transactions) do
-  begin
-    Inc(i,3);
-    L      :=FClientLibrary.isc_vax_integer(@local_buffer[i], 4);
-    Result .Add(IntToStr(L));
-    Inc(i,4);
-  end;
+  FHandle.GetActiveTransactions(FActiveTransactions);
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetFBVersion: string; //frb_info_firebird_version
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(frb_info_firebird_version);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  if DBInfoCommand=local_buffer[0] then
-  begin
-   local_buffer[5 + Int(local_buffer[4])] := #0;
-   Result:= PAnsiChar(@local_buffer[5]);
-  end
-  else
-   Result:= '';
+  Result := FHandle.GetFBVersion;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetAttachCharset:Integer;               // frb_info_att_charset
-var
-  Success:boolean ;
 begin
- Result:=GetProtectLongDBInfo(frb_info_att_charset,Success);
- if not Success then
-  Result := -1
+  CheckActive;
+  Result := FHandle.GetAttachCharset;
+  CheckStatus(FHandle.Status, True);
 end;
 
 procedure TFIBDatabase.FillServerVersions;
@@ -2633,252 +2622,252 @@ begin
 end;
 
 function TFIBDatabase.GetDBImplementationNo: Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
   CheckActive;
-  DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[3], 1);
+  Result := FHandle.GetDBImplementationNo;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetOldestTransaction: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_transaction,Success);
+  CheckActive;
+  Result := FHandle.GetOldestTransaction;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetOldestActive: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_active,Success);
+  CheckActive;
+  Result := FHandle.GetOldestActive;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetOldestSnapshot: Long;
-var
-  Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(frb_info_oldest_snapshot,Success);
+  CheckActive;
+  Result := FHandle.GetOldestSnapshot;
+  CheckStatus(FHandle.Status, True);
 end;
 
-
 function TFIBDatabase.GetDBImplementationClass: Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
-  DBInfoCommand := AnsiChar(isc_info_implementation);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[4], 1);
+  CheckActive();
+  Result := FHandle.GetDBImplementationClass;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetNoReserve: Long;
 begin
-  Result := GetLongDBInfo(isc_info_no_reserve);
+  CheckActive();
+  Result := FHandle.GetNoReserve;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetODSMinorVersion: Long;
 begin
-  Result := GetLongDBInfo(isc_info_ods_minor_version);
+  CheckActive();
+  Result := FHandle.GetODSMinorVersion;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetODSMajorVersion: Long;
 begin
-  Result := GetLongDBInfo(isc_info_ods_version);
+  CheckActive();
+  Result := FHandle.GetODSMajorVersion;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetPageSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_page_size);
+  CheckActive();
+  Result := FHandle.GetPageSize;
+  CheckStatus(FHandle.Status, True);
+end;
+
+function TFIBDatabase.GetPHandle: PISC_DB_HANDLE;
+begin
+  Result := (FHandle as IFb25Attachment).GetPHandle;
 end;
 
 function TFIBDatabase.GetVersion: string;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  DBInfoCommand: AnsiChar;
 begin
-  DBInfoCommand := AnsiChar(isc_info_version);
-
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBBigLocalBufferLength, local_buffer), True);
-  local_buffer[5 + Int(local_buffer[4])] := #0;
-  Result := PAnsiChar(@local_buffer[5]);
+  CheckActive();
+  Result := FHandle.GetVersion;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetCurrentMemory: Long;
 begin
-  Result := GetLongDBInfo(isc_info_current_memory);
+  CheckActive();
+  Result := FHandle.GetCurrentMemory;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetForcedWrites: Long;
 begin
-  Result := GetLongDBInfo(isc_info_forced_writes);
+  CheckActive();
+  Result := FHandle.GetForcedWrites;
+  CheckStatus(FHandle.Status, True);
+end;
+
+function TFIBDatabase.GetHandle: TISC_DB_HANDLE;
+begin
+  Result := nil;
+  if Assigned(FHandle) then
+    Result := IFb25Attachment(FHandle).Handle;
 end;
 
 function TFIBDatabase.GetMaxMemory: Long;
 begin
-  Result := GetLongDBInfo(isc_info_max_memory);
+  CheckActive();
+  Result := FHandle.GetMaxMemory;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetNumBuffers: Long;
 begin
-  Result := GetLongDBInfo(isc_info_num_buffers);
+  CheckActive();
+  Result := FHandle.GetNumBuffers;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetSweepInterval: Long; // isc_info_sweep_interval
 begin
-  Result := GetLongDBInfo(isc_info_sweep_interval);
+  CheckActive();
+  Result := FHandle.GetSweepInterval;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetUserNames: TStringList;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  temp_buffer: array[0..FIBLocalBufferLength - 2] of AnsiChar;
-  DBInfoCommand: AnsiChar;
-  i, user_length: Integer;
 begin
-  if FUserNames = nil then FUserNames := TStringList.Create;
+  CheckActive();
+  if FUserNames = nil then
+    FUserNames := TStringList.Create;
+
+  FHandle.GetUserNames(FUserNames);
+  CheckStatus(FHandle.Status, True);
   Result := FUserNames;
-  DBInfoCommand := AnsiChar(isc_info_user_names);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @DBInfoCommand,
-                        FIBHugeLocalBufferLength, local_buffer), True);
-  FUserNames.Clear;
-  i := 0;
-  while local_buffer[i] = AnsiChar(isc_info_user_names) do
-  begin
-    Inc(i, 3);
-    // skip "isc_info_user_names byte" & two unknown bytes of structure (see below)
-    user_length := Long(local_buffer[i]);
-    Inc(i,1);
-    Move(local_buffer[i], temp_buffer[0], user_length);
-    Inc(i, user_length);
-    temp_buffer[user_length] := #0;
-    FUserNames.Add(Ansistring(temp_buffer));
-  end;
 end;
 
 function TFIBDatabase.GetFetches: Long;
 begin
-  Result := GetLongDBInfo(isc_info_fetches);
+  CheckActive();
+  Result := FHandle.GetFetches;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetReadOnly: Long;
 begin
-  Result := GetLongDBInfo(isc_info_db_read_only);
+  CheckActive();
+  Result := FHandle.GetReadOnly;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetMarks: Long;
 begin
-  Result := GetLongDBInfo(isc_info_marks);
+  CheckActive();
+  Result := FHandle.GetMarks;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetReads: Long;
 begin
-  Result := GetLongDBInfo(isc_info_reads);
+  CheckActive();
+  Result := FHandle.GetReads;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWrites: Long;
 begin
-  Result := GetLongDBInfo(isc_info_writes);
+  CheckActive();
+  Result := FHandle.GetWrites;
+  CheckStatus(FHandle.Status, True);
 end;
 
-function TFIBDatabase.GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-  i, qtd_tables, id_table, qtd_operations: Integer;
-begin
-  if FOperation = nil then FOperation := TStringList.Create;
-  Result := FOperation;
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
-                         FIBHugeLocalBufferLength, local_buffer), True);
-  FOperation.Clear;
-  // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
-  // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
-  // 3. A pair of values for each table in the database on wich the requested
-  //    type of operation has occurred since the database was last attached.
-  // Each pair consists of:
-  // 1. 2 bytes specifying the table ID.
-  // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-  qtd_tables := trunc(FClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
-  for i := 0 to qtd_tables - 1 do
-  begin
-    id_table := FClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
-    qtd_operations := FClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
-    FOperation.Add(IntToStr(id_table)+'='+IntToStr(qtd_operations));
-  end;
-end;
+//function TFIBDatabase.GetOperationCounts(DBInfoCommand: Integer; var FOperation: TStringList): TStringList;
+//var
+//  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
+//  _DBInfoCommand: AnsiChar;
+//  i, qtd_tables, id_table, qtd_operations: Integer;
+//begin
+//  if FOperation = nil then FOperation := TStringList.Create;
+//  Result := FOperation;
+//  _DBInfoCommand := AnsiChar(DBInfoCommand);
+//  Call(FClientLibrary.isc_database_info(StatusVector, (FHandle as IFb25Attachment).GetPHandle, 1, @_DBInfoCommand,
+//                         FIBHugeLocalBufferLength, local_buffer), True);
+//  FOperation.Clear;
+//  // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
+//  // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
+//  // 3. A pair of values for each table in the database on wich the requested
+//  //    type of operation has occurred since the database was last attached.
+//  // Each pair consists of:
+//  // 1. 2 bytes specifying the table ID.
+//  // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
+//  qtd_tables := trunc(FClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
+//  for i := 0 to qtd_tables - 1 do
+//  begin
+//    id_table := FClientLibrary.isc_vax_integer(@local_buffer[3+(i*6)],2);
+//    qtd_operations := FClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4);
+//    FOperation.Add(IntToStr(id_table)+'='+IntToStr(qtd_operations));
+//  end;
+//end;
 
 function TFIBDatabase.GetAllModifications:integer;
-var
-  local_buffer: array[0..FIBHugeLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-  i, qtd_tables: Integer;
-  j:byte;
 begin
-  Result := 0;
-  for j:=isc_info_insert_count to isc_info_delete_count do
-  begin
-    _DBInfoCommand:=AnsiChar(j);
-    Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
-                           FIBHugeLocalBufferLength, local_buffer), True);
-    // 1. 1 byte specifying the item type requested (e.g., isc_info_insert_count).
-    // 2. 2 bytes telling how many bytes compose the subsequent value pairs.
-    // 3. A pair of values for each table in the database on wich the requested
-    //    type of operation has occurred since the database was last attached.
-    // Each pair consists of:
-    // 1. 2 bytes specifying the table ID.
-    // 2. 4 bytes listing the number of operations (e.g., inserts) done on that table.
-    qtd_tables := trunc(FClientLibrary.isc_vax_integer(@local_buffer[1],2)/6);
-    for i := 0 to qtd_tables - 1 do
-    begin
-      Inc(Result,FClientLibrary.isc_vax_integer(@local_buffer[5+(i*6)],4));
-    end;
-  end;
+  CheckActive;
+  Result := FHandle.GetAllModifications;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetBackoutCount: TStringList;
 begin
- if FBackoutCount=nil then FBackoutCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_backout_count,FBackoutCount);
+  if FBackoutCount=nil then FBackoutCount:=TStringList.Create;
+  FHandle.GetBackoutCount(FBackoutCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FBackoutCount;
 end;
 
 function TFIBDatabase.GetDeleteCount: TStringList;
 begin
- if FDeleteCount=nil then FDeleteCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_delete_count,FDeleteCount);
+  if FDeleteCount=nil then FDeleteCount:=TStringList.Create;
+  FHandle.GetDeleteCount(FDeleteCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FDeleteCount;
 end;
 
 function TFIBDatabase.GetExpungeCount: TStringList;
 begin
  if FExpungeCount=nil then FExpungeCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_expunge_count,FExpungeCount);
+  FHandle.GetExpungeCount(FExpungeCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FExpungeCount;
 end;
 
 function TFIBDatabase.GetInsertCount: TStringList;
 begin
  if FInsertCount=nil then FInsertCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_insert_count,FInsertCount);
+   FHandle.GetInsertCount(FInsertCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FInsertCount;
 end;
 
 
 function TFIBDatabase.GetPurgeCount: TStringList;
 begin
  if FPurgeCount=nil then FPurgeCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_purge_count,FPurgeCount);
+   FHandle.GetPurgeCount(FPurgeCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FPurgeCount;
 end;
 
 function TFIBDatabase.GetReadIdxCount: TStringList;
 begin
  if FReadIdxCount=nil then
   FReadIdxCount:=TStringList.Create;
- Result := GetOperationCounts(isc_info_read_idx_count,FReadIdxCount);
+
+   FHandle.GetReadIdxCount(FReadIdxCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FReadIdxCount;
 end;
 
 function TFIBDatabase.GetTableOperationInfo(const TableName:string; FromStrs:TStrings):integer;
@@ -2927,128 +2916,126 @@ end;
 function TFIBDatabase.GetReadSeqCount: TStringList;
 begin
  if FReadSeqCount=nil then FReadSeqCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_read_seq_count,FReadSeqCount);
+  FHandle.GetReadIdxCount(FReadSeqCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FReadSeqCount;
 end;
 
 function TFIBDatabase.GetUpdateCount: TStringList;
 begin
  if FUpdateCount=nil then FUpdateCount:=TStringList.Create;
-  Result := GetOperationCounts(isc_info_update_count,FUpdateCount);
+  FHandle.GetUpdateCount(FUpdateCount);
+  CheckStatus(FHandle.Status, True);
+  Result := FUpdateCount;
 end;
 
 function TFIBDatabase.GetLogFile: Long;
 begin
-  Result := GetLongDBInfo(isc_info_logfile);
+  CheckActive();
+  Result := FHandle.GetLogFile;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetCurLogFileName: string;
 begin
-  Result := GetStringDBInfo(isc_info_cur_logfile_name);
+  CheckActive();
+  Result := FHandle.GetCurLogFileName;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetCurLogPartitionOffset: Long;
 begin
-  Result := GetLongDBInfo(isc_info_cur_log_part_offset);
+  CheckActive();
+  Result := FHandle.GetCurLogPartitionOffset;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetNumWALBuffers: Long;
 begin
-  Result := GetLongDBInfo(isc_info_num_wal_buffers);
+  CheckActive();
+  Result := FHandle.GetNumWALBuffers;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALBufferSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_buffer_size);
+  CheckActive();
+  Result := FHandle.GetWALBufferSize;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALCheckpointLength: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_ckpt_length);
+  CheckActive();
+  Result := FHandle.GetWALCheckpointLength;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALCurCheckpointInterval: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_cur_ckpt_interval);
+  CheckActive();
+  Result := FHandle.GetWALCurCheckpointInterval;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALPrvCheckpointFilename: string;
 begin
-  Result := GetStringDBInfo(isc_info_wal_prv_ckpt_fname);
+  CheckActive();
+  Result := FHandle.GetWALPrvCheckpointFilename;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALPrvCheckpointPartOffset: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_prv_ckpt_poffset);
+  CheckActive();
+  Result := FHandle.GetWALPrvCheckpointPartOffset;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALGroupCommitWaitUSecs: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_grpc_wait_usecs);
+  CheckActive();
+  Result := FHandle.GetWALGroupCommitWaitUSecs;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALNumIO: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_num_io);
+  CheckActive();
+  Result := FHandle.GetWALNumIO;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALAverageIOSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_avg_io_size);
+  CheckActive();
+  Result := FHandle.GetWALAverageIOSize;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALNumCommits: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_num_commits);
+  CheckActive();
+  Result := FHandle.GetWALNumCommits;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetWALAverageGroupCommitSize: Long;
 begin
-  Result := GetLongDBInfo(isc_info_wal_avg_grpc_size);
-end;
-
-function TFIBDatabase.GetProtectLongDBInfo
- (DBInfoCommand: Integer;var Success:boolean): Long;
-var
-  local_buffer: array[0..FIBLocalBufferLength - 1] of AnsiChar;
-  length: Integer;
-  _DBInfoCommand: AnsiChar;
-begin
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
-                         FIBLocalBufferLength, local_buffer), True);
-  Success:=local_buffer[0] = _DBInfoCommand;
-  length := FClientLibrary.isc_vax_integer(@local_buffer[1], 2);
-  Result := FClientLibrary.isc_vax_integer(@local_buffer[3], length);
-
-end;
-
-function TFIBDatabase.GetLongDBInfo(DBInfoCommand: Integer): Long;
-var Success:boolean;
-begin
-  Result := GetProtectLongDBInfo(DBInfoCommand,Success)
-end;
-
-function TFIBDatabase.GetStringDBInfo(DBInfoCommand: Integer): string;
-var
-  local_buffer: array[0..FIBBigLocalBufferLength - 1] of AnsiChar;
-  _DBInfoCommand: AnsiChar;
-begin
-  _DBInfoCommand := AnsiChar(DBInfoCommand);
-  Call(FClientLibrary.isc_database_info(StatusVector, @FHandle, 1, @_DBInfoCommand,
-                         FIBBigLocalBufferLength, local_buffer), True);
-  local_buffer[4 + Int(local_buffer[3])] := #0;
-  Result := PAnsiChar(@local_buffer[4]);
+  CheckActive();
+  Result := FHandle.GetWALNumCommits;
+  CheckStatus(FHandle.Status, True);
 end;
 
 function TFIBDatabase.GetAttachmentID  :Long;
 begin
  if vAttachmentID=-1 then
  begin
-  if FHandle=nil then
-   Result    :=-1
+  if FHandle = nil then
+   Result    := -1
   else
   begin
-    Result:= GetLongDBInfo(isc_info_attachment_id);
+    Result := FHandle.GetAttachmentID;
     vAttachmentID:=Result;
   end;
  end
@@ -3060,10 +3047,10 @@ end;
 
 //IB6
 function TFIBDatabase.GetDBSQLDialect:Word;
-var Success:boolean;
 begin
- Result:=GetProtectLongDBInfo(isc_info_db_SQL_dialect,Success);
- if not Success then Result:=1
+  CheckActive;
+  Result := FHandle.GetDBSQLDialect;
+  CheckStatus(FHandle.Status, true);
 end;
 
 
@@ -3344,8 +3331,8 @@ end;
 
 function TFIBDatabase.GetBusy: boolean;
 begin
- if Assigned(FClientLibrary) then
-  Result:=FClientLibrary.Busy
+ if Assigned(ClientLibrary) then
+  Result:= ClientLibrary.Busy
  else
   Result:=False
 end;
@@ -3447,22 +3434,6 @@ begin
  Result:=Active and MainDatabase.StoreConnected
 end;
 
-function TFIBTransaction.Call(ErrCode: ISC_STATUS;
-  RaiseError: Boolean): ISC_STATUS;
-var
-  i: Integer;
-begin
-  Set8087CW(Default8087CW);
-  Result := ErrCode;
-  FCanTimeout := False;
-
-  for i := 0 to FDatabases.Count - 1 do
-    Databases[i].Call(ErrCode,False); // For reset timer
-
-  if (Result > 0) and RaiseError  then
-    IbError(IIbClientLibrary(Databases[0]),Self);
-end;
-
 procedure TFIBTransaction.CheckDatabasesInList;
 begin
   if GetDatabaseCount = 0 then
@@ -3543,6 +3514,20 @@ begin
     FIBError(feInTransaction, [CmpFullName(Self)]);
 end;
 
+procedure TFIBTransaction.CheckStatus(AStatus: IFbStatus; RaiseError: Boolean);
+var
+  i: Integer;
+begin
+  Set8087CW(Default8087CW);
+  FCanTimeout := False;
+
+  for i := 0 to FDatabases.Count - 1 do
+    Databases[i].CheckStatus(AStatus, False); // For reset timer
+
+  if (AStatus.HasErrors) and RaiseError  then
+    IbError(IIbClientLibrary(Databases[0]),Self, (AStatus as IFb25Status).StatusVector);
+end;
+
 function TFIBTransaction.AddDatabase(db: TFIBDatabase): Integer;
 var
   i: Integer;
@@ -3608,136 +3593,145 @@ procedure TFIBTransaction.CommitRetaining;
 begin
   EndTransaction(TACommitRetaining, False);
 end;
-
 (*
  * EndTransaction -
  *  End a transaction ...
  *)
-procedure TFIBTransaction.EndTransaction(Action: TTransactionAction;
-  Force: Boolean);
+procedure TFIBTransaction.EndTransaction(Action: TTransactionAction; Force: Boolean);
 var
-  status: ISC_STATUS;
-  s:string;
+  s: string;
 
-procedure DoBefore;
-var
-  i: Integer;
-begin
-  for i := FFIBBases.Count - 1 downto 0 do
-   FIBBases[i].FOnTransactionEnding;
-  for i := 0 to vBeforeEndTransaction.Count - 1 do
-   TEndTrEvent(vBeforeEndTransaction.CallBackAddr[i]^)(Self,Action, Force);
-end;
+  procedure DoBefore;
+  var
+    i: Integer;
+  begin
+    for i := FFIBBases.Count - 1 downto 0 do
+      FIBBases[i].FOnTransactionEnding;
+    for i := 0 to vBeforeEndTransaction.Count - 1 do
+      TEndTrEvent(vBeforeEndTransaction.CallBackAddr[i]^)(Self, Action, Force);
+  end;
 
-procedure DoAfter;
-var
-  i: Integer;
-begin
-  for i :=  FFIBBases.Count - 1 downto 0 do
-    FIBBases[i].FOnTransactionEnded;
-  for i := 0 to vAfterEndTransaction.Count - 1 do
-   TEndTrEvent(vAfterEndTransaction.CallBackAddr[i]^)(Self,Action, Force);
+  procedure DoAfter;
+  var
+    i: Integer;
+  begin
+    for i := FFIBBases.Count - 1 downto 0 do
+      FIBBases[i].FOnTransactionEnded;
+    for i := 0 to vAfterEndTransaction.Count - 1 do
+      TEndTrEvent(vAfterEndTransaction.CallBackAddr[i]^)(Self, Action, Force);
 
- FHasUncommitedUpdates:=False
-end;
+    FHasUncommitedUpdates := False
+  end;
 
 begin
   CheckInTransaction;
   if Assigned(MainDatabase.FSQLLogger) then
   begin
     case Action of
-     TACommit:
-        s:='Commit';
-     TARollback:
-        s:='RollBack';
-     TACommitRetaining:
-        s:='CommitRetaining';
+      TACommit:
+        s := 'Commit';
+      TARollback:
+        s := 'RollBack';
+      TACommitRetaining:
+        s := 'CommitRetaining';
     else
-        s:='RollBackRetaining';
+      s := 'RollBackRetaining';
     end;
-       MainDatabase.FSQLLogger.WriteData(
-        CmpFullName(Self),s+'(TransactionID='+IntToStr(TransactionID)+') ',
-         'TransactionParams:'#13#10+TRParams.Text,lfTransact
-       );
+    MainDatabase.FSQLLogger.WriteData(CmpFullName(Self), s + '(TransactionID=' + IntToStr(TransactionID) +
+      ') ', 'TransactionParams:'#13#10 + TRParams.Text, lfTransact);
   end;
 
   case Action of
     TARollback, TACommit:
-    begin
-      if (HandleIsShared) and
-         (Action <> FTimeoutAction) and
-         (not Force) then
-        FIBError(feCantEndSharedTransaction, [nil]);
-      if Action=TARollback then
-       FState:=tsDoRollback
-      else
-       FState:=tsDoCommit;
-      DoBefore;
-      if HandleIsShared then
       begin
-        FHandle := nil;
-        FHandleIsShared := False;
-        status := 0;
-      end
-      else
-      if (Action = TARollback) then
-        status := Call(IIbClientLibrary(MainDatabase).isc_rollback_transaction(StatusVector, @FHandle), False)
-      else
-        status := Call(IIbClientLibrary(MainDatabase).isc_commit_transaction(StatusVector, @FHandle), False);
-      if ((Force) and (status > 0)) then
-        status := Call(IIbClientLibrary(MainDatabase).isc_rollback_transaction(StatusVector, @FHandle), False);
-      if Force then
-        FHandle := nil
-      else
-      if (status > 0) then
-        IBError(MainDatabase,Self);
-      DoAfter;
-
-      end;
-      TACommitRetaining:
-      begin
-        FState:=tsDoCommitRetaining;
+        if (HandleIsShared) and (Action <> FTimeoutAction) and (not Force) then
+          FIBError(feCantEndSharedTransaction, [nil]);
+        if Action = TARollback then
+          FState := tsDoRollback
+        else
+          FState := tsDoCommit;
         DoBefore;
-        Call(IIbClientLibrary(MainDatabase).isc_commit_retaining(StatusVector, @FHandle), True);
+
+        if HandleIsShared then
+        begin
+          FHandle := nil;
+          FHandleIsShared := False;
+        end
+        else if (Action = TARollback) then
+        begin
+          FHandle.Rollback;
+          CheckStatus(FHandle.Status, False);
+        end
+        else
+        begin
+          FHandle.Commit;
+          CheckStatus(FHandle.Status, False);
+        end;
+
+        if ((Force) and (FHandle.Status.HasErrors)) then
+        begin
+          FHandle.Rollback;
+          CheckStatus(FHandle.Status, False);
+        end;
+
+        if Force then
+          FHandle := nil
+        else if (FHandle.Status.HasErrors) then
+          IBError(MainDatabase, Self, StatusVector);
+
         DoAfter;
       end;
-      TARollbackRetaining:
+    TACommitRetaining:
       begin
-        FState:=tsDoRollbackRetaining;
+        FState := tsDoCommitRetaining;
         DoBefore;
-        Call(IIbClientLibrary(MainDatabase).isc_rollback_retaining(StatusVector, @FHandle), True);
+        FHandle.CommitRetaining;
+        CheckStatus(FHandle.Status, True);
+        DoAfter;
+      end;
+    TARollbackRetaining:
+      begin
+        FState := tsDoRollbackRetaining;
+        DoBefore;
+        FHandle.CommitRetaining;
+        CheckStatus(FHandle.Status, True);
         DoAfter;
       end;
   end;
  {$IFNDEF NO_MONITOR}
-   if MonitoringEnabled  then
-   case Action of
-    TACommit:
-     if MonitorHook<>nil then
-       MonitorHook.TRCommit(Self);
-    TARollback:
-     if MonitorHook<>nil then
-       MonitorHook.TRRollback(Self);
-    TACommitRetaining:
-     if MonitorHook<>nil then
-      MonitorHook.TRCommitRetaining(Self);
-    TARollbackRetaining:
-     if MonitorHook<>nil then
-      MonitorHook.TRRollbackRetaining(Self);
-   end;
+  if MonitoringEnabled then
+    case Action of
+      TACommit:
+        if MonitorHook <> nil then
+          MonitorHook.TRCommit(Self);
+      TARollback:
+        if MonitorHook <> nil then
+          MonitorHook.TRRollback(Self);
+      TACommitRetaining:
+        if MonitorHook <> nil then
+          MonitorHook.TRCommitRetaining(Self);
+      TARollbackRetaining:
+        if MonitorHook <> nil then
+          MonitorHook.TRRollbackRetaining(Self);
+    end;
  {$ENDIF}
+
   if InTransaction then
   begin
-   FState:=tsActive;
+    FState := tsActive;
   end
   else
   begin
-   FState:=tsClosed ;
-   if FTimer<>nil then
-    FTimer.Enabled:=False;
-   if csDesigning in ComponentState then  CloseAllQueryHandles;
+    FState := tsClosed;
+
+    if FTimer <> nil then
+      FTimer.Enabled := False;
+
+    if csDesigning in ComponentState then
+      CloseAllQueryHandles;
   end;
-  FTransactionID:=0;
+
+  FTransactionID := 0;
 end;
 
 function TFIBTransaction.GetDatabase(Index: Integer): TFIBDatabase;
@@ -3774,6 +3768,11 @@ end;
 function TFIBTransaction.GetInTransaction: Boolean;
 begin
   Result := (FHandle <> nil);
+end;
+
+function TFIBTransaction.GetPHandle: PISC_TR_HANDLE;
+begin
+  Result := (FHandle as IFb25Transaction).GetPHandle; // TODO: remove
 end;
 
 function TFIBTransaction.FindDatabase(db: TFIBDatabase): Integer;
@@ -3952,7 +3951,7 @@ begin
   FDefaultDatabase := Value;
 end;
 
-procedure TFIBTransaction.SetHandle(Value: TISC_TR_HANDLE);
+procedure TFIBTransaction.SetHandle(Value: IFBTransaction);
 begin
   if (HandleIsShared) then
     EndTransaction(TimeoutAction, True)
@@ -3996,114 +3995,119 @@ end;
  *)
 procedure TFIBTransaction.StartTransaction;
 var
-  pteb: PISC_TEB_ARRAY;
-  TPB: Ansistring;
   i: Integer;
-  vTRParams1:TStrings;
-  vTPBLength:Short;
-  vIsFB21orMore:boolean;
+  vIsFB21orMore: boolean;
+  transactionParams: IFbTransactionParams;
 begin
     (*
      * Check that we're not already in a transaction.
      * Check that there is at least one database in the list.
      *)
 
-    CheckNotInTransaction;
-    CheckDatabasesInList;
-    for i := 0 to DatabaseCount - 1 do
-    begin
-      Databases[i].CheckActive(not (trsInLoaded in FTransactionRunStates));
-      if not Databases[i].Connected then
-       Exit;
-    end;
-    vIsFB21orMore:=MainDatabase.FIsFB21orMore;
+  CheckNotInTransaction;
+  CheckDatabasesInList;
+  for i := 0 to DatabaseCount - 1 do
+  begin
+    Databases[i].CheckActive(not (trsInLoaded in FTransactionRunStates));
+    if not Databases[i].Connected then
+      Exit;
+  end;
+
+  vIsFB21orMore := MainDatabase.FIsFB21orMore;
     (*
      * Make sure that a current TPB is generated.
      *)
-      if FTRParamsChanged then
-      begin
-        FTRParamsChanged := False;
-        GenerateTPB(FTRParams, TPB, FTPBLength,vIsFB21orMore);
-        FIBAlloc(FTPB, 0, FTPBLength);
-        Move(TPB[1], FTPB[0], FTPBLength);
-      end;
-      GetMem(pteb,DatabaseCount * SizeOf(TISC_TEB));
-      vTRParams1:=nil;
-      try
-        for i := 0 to DatabaseCount - 1 do
-        begin
-          pteb^[i].db_handle   := @(Databases[i].Handle);
-          if vTRParams[i]='' then
-          begin
-           pteb^[i].tpb_address := FTPB;
-           pteb^[i].tpb_length  := FTPBLength;
-          end
-          else
-          begin
-           if vTRParams1=nil then
-            vTRParams1:=TStringList.Create;
-           vTRParams1.Text:=vTRParams[i];
+//      if FTRParamsChanged then
+//      begin
+//        FTRParamsChanged := False;
+//        GenerateTPB(FTRParams, TPB, FTPBLength,vIsFB21orMore);
+//        FIBAlloc(FTPB, 0, FTPBLength);
+//        Move(TPB[1], FTPB[0], FTPBLength);
+//      end;
+//      GetMem(pteb,DatabaseCount * SizeOf(TISC_TEB));
+//      vTRParams1:=nil;
 
-           SetLength(vTPBArray,i+1);
-           GenerateTPB(vTRParams1, vTPBArray[i], vTPBLength,vIsFB21orMore);
-           if Length(vTPBArray[i])>0 then
-           begin
-            pteb^[i].tpb_address := @vTPBArray[i][1];
-            pteb^[i].tpb_length  := vTPBLength;
-           end
-           else
-           begin
-            pteb^[i].tpb_address := FTPB;
-            pteb^[i].tpb_length  := FTPBLength;
-           end
-          end;
-        end;
-        for i := 0 to FFIBBases.Count - 1 do
-         FIBBases[i].FOnTransactionStarting;
+  transactionParams := FDefaultDatabase.FProvider.GetTransactionParams;
+  transactionParams.GenerateParams(FTRParams, vIsFB21orMore);
+
+  try
+    for i := 0 to DatabaseCount - 1 do
+    begin
+      transactionParams.GenerateDistributedParams(Databases[i].FHandle, transactionParams);
+//            pteb^[i].db_handle   := (Databases[i].PHandle);
+//            if vTRParams[i]='' then
+//            begin
+//             pteb^[i].tpb_address := FTPB;
+//             pteb^[i].tpb_length  := FTPBLength;
+//            end
+//            else
+//            begin
+//             if vTRParams1=nil then
+//              vTRParams1:=TStringList.Create;
+//             vTRParams1.Text:=vTRParams[i];
+//
+//             SetLength(vTPBArray,i+1);
+//             GenerateTPB(vTRParams1, vTPBArray[i], vTPBLength,vIsFB21orMore);
+//             if Length(vTPBArray[i])>0 then
+//             begin
+//              pteb^[i].tpb_address := @vTPBArray[i][1];
+//              pteb^[i].tpb_length  := vTPBLength;
+//             end
+//             else
+//             begin
+//              pteb^[i].tpb_address := FTPB;
+//              pteb^[i].tpb_length  := FTPBLength;
+//             end
+//            end;
+    end;
+
+    for i := 0 to FFIBBases.Count - 1 do
+      FIBBases[i].FOnTransactionStarting;
 
         (*
          * Finally, start the transaction
          *)
-        if not InTransaction then
-        begin
-          for i := Pred(vBeforeStartTransaction.Count) downto 0 do
-           vBeforeStartTransaction.Event[i](Self);
+    if not InTransaction then
+    begin
+      for i := Pred(vBeforeStartTransaction.Count) downto 0 do
+        vBeforeStartTransaction.Event[i](Self);
 
-          if (Call(IIbClientLibrary(MainDatabase).isc_start_multiple(StatusVector, @FHandle,
-                                     DatabaseCount, PISC_TEB(pteb)), False) > 0)
+      FHandle := MainDatabase.FHandle.StartDistributedTransaction(transactionParams);
 
-          then
-          begin
-            FHandle := nil;
-            if not (trsInLoaded in FTransactionRunStates) then
-             IbError(MainDatabase,Self);
-          end;
-          for i := Pred(vAfterStartTransaction.Count) downto 0 do
-           vAfterStartTransaction.Event[i](Self);
-        end;
+//          if (Call(IIbClientLibrary(MainDatabase).isc_start_multiple(StatusVector, @FHandle,
+//                                     DatabaseCount, PISC_TEB(pteb)), False) > 0)
 
-        for i := 0 to FFIBBases.Count - 1 do
-          FIBBases[i].FOnTransactionStarted;
-     {$IFNDEF NO_MONITOR}
-       if MonitoringEnabled  then
-        if MonitorHook<>nil then
-         MonitorHook.TRStart(Self);
-     {$ENDIF}
-      finally
-        vTRParams1.Free;
-        FIBAlloc(pteb, 0, 0);
+
+      if MainDatabase.Handle.Status.HasErrors then
+      begin
+        if not (trsInLoaded in FTransactionRunStates) then
+          IbError(MainDatabase, Self, (MainDatabase.Handle.Status as IFB25Status).StatusVector);
       end;
 
-    FState:=tsActive;
+      for i := Pred(vAfterStartTransaction.Count) downto 0 do
+        vAfterStartTransaction.Event[i](Self);
+    end;
 
-    if Assigned(MainDatabase.FSQLLogger) then
-     MainDatabase.FSQLLogger.WriteData(
-      CmpFullName(Self),'StartTransaction(TransactionID='+IntToStr(TransactionID)+')',
-      'TransactionParams:'#13#10+TRParams.Text,lfTransact
-     );
+    for i := 0 to FFIBBases.Count - 1 do
+      FIBBases[i].FOnTransactionStarted;
+     {$IFNDEF NO_MONITOR}
+    if MonitoringEnabled then
+      if MonitorHook <> nil then
+        MonitorHook.TRStart(Self);
+     {$ENDIF}
+  finally
+//          vTRParams1.Free;
+//          FIBAlloc(pteb, 0, 0);
+  end;
 
-    if (FTimer<>nil) and  (FTimer.Interval>0) then
-     FTimer.Enabled:=True
+  FState := tsActive;
+
+  if Assigned(MainDatabase.FSQLLogger) then
+    MainDatabase.FSQLLogger.WriteData(CmpFullName(Self), 'StartTransaction(TransactionID=' + IntToStr(TransactionID)
+      + ')', 'TransactionParams:'#13#10 + TRParams.Text, lfTransact);
+
+  if (FTimer <> nil) and (FTimer.Interval > 0) then
+    FTimer.Enabled := True
 end;
 
 procedure TFIBTransaction.ExecSQLImmediate(const SQLText:Widestring);
@@ -4115,14 +4119,9 @@ begin
     vSQLText:=UTF8Encode(SQLText)
   else
     vSQLText:=SQLText;
-  Call(
-    MainDatabase.ClientLibrary.
-    isc_dsql_execute_immediate(
-     StatusVector, @MainDatabase.Handle, @FHandle, 0,
-     PAnsiChar(vSQLText), MainDatabase.SQLDialect, nil
-    ),
-   True
-  );
+
+  MainDatabase.Handle.Execute(FHandle, PAnsiChar(vSQLText), MainDatabase.SQLDialect);
+  CheckStatus(MainDatabase.Handle.Status, True);
 end;
 
 procedure TFIBTransaction.SetSavePoint(const SavePointName:string);
@@ -4179,35 +4178,29 @@ begin
   CheckNotInTransaction;
 end;
 
-function  TFIBTransaction.GetTransactionID: integer;
-var tra_items: AnsiChar;
-    tra_info :array [0..31] of AnsiChar;
+function TFIBTransaction.GetTransactionID: integer;
 begin
- if FTransactionID>0 then
- begin
-  Result:=FTransactionID; Exit;
- end;
- if FHandle=nil then
- begin
-  Result:=0; Exit;
- end;
- if MainDatabase.FDatabaseRunState<>[] then
- begin
-  Result:=0; Exit;
- end;
+  if FTransactionID > 0 then
+  begin
+    Result := FTransactionID;
+    Exit;
+  end;
 
-  tra_items:=AnsiChar(isc_info_tra_id);
-  Call(IIbClientLibrary(MainDatabase).
-   isc_transaction_info(
-    StatusVector,@FHandle,
-    sizeof (tra_items),
-    @tra_items,
-    sizeof (tra_info),
-    tra_info
-   ),true
-  );
-   Result:=PInteger(tra_info+3)^;
-   FTransactionID:=Result
+  if FHandle = nil then
+  begin
+    Result := 0;
+    Exit;
+  end;
+
+  if MainDatabase.FDatabaseRunState <> [] then
+  begin
+    Result := 0;
+    Exit;
+  end;
+
+  Result := FHandle.GetTransactionId;
+  CheckStatus(FHandle.Status, True);
+  FTransactionID := Result;
 end;
 
 procedure TFIBTransaction.CloseAllQueryHandles;
@@ -4291,13 +4284,13 @@ end;
 function TFIBBase.GetDBHandle: PISC_DB_HANDLE;
 begin
   CheckDatabase;
-  Result := @FDatabase.Handle;
+  Result := (FDatabase.Handle as IFb25Attachment).GetPHandle;
 end;
 
 function TFIBBase.GetTRHandle: PISC_TR_HANDLE;
 begin
   CheckTransaction;
-  Result := @FTransaction.Handle;
+  Result := FTransaction.GetPHandle;
 end;
 
  procedure TFIBBase.FOnDatabaseConnecting;
@@ -4370,8 +4363,10 @@ procedure TFIBBase.SetDatabase(Value: TFIBDatabase);
 begin
   if FDatabase=Value then
    Exit;
+
   if (FDatabase <> nil) then
     FDatabase.RemoveFIBBase(FIndexInDatabase);
+
   FDatabase := Value;
   if (FDatabase <> nil) then
   begin
@@ -4388,8 +4383,10 @@ procedure TFIBBase.SetTransaction(Value: TFIBTransaction);
 begin
   if FTransaction=Value then
    Exit;
+
   if (FTransaction <> nil) then
     FTransaction.RemoveFIBBase(FIndexInTransaction);
+
   FTransaction := Value;
   if (FTransaction <> nil) then
   begin

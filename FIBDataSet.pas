@@ -31,7 +31,7 @@ uses
  pFIBProps,pFIBFieldsDescr, DB,FIBCacheManage,
  DBCommon,DbConsts,DBParsers,
  FIBDatabase, FIBQuery, FIBMiscellaneous,SqlTxtRtns,pFIBLists,FIBCloneComponents ,
- pFIBInterfaces,pFIBEventLists,
+ pFIBInterfaces,pFIBEventLists, Fb25Interfaces,
   Classes,StdFuncs
   {$IFNDEF NO_GUI}
    {$IFDEF D_XE2}
@@ -11915,25 +11915,29 @@ begin
   qf.FIBArray.GetFieldArrayValues(Field,DBHandle,TRHandle)
 end;
 
-procedure TFIBCustomDataSet.SetArrayValue(Field:TField;Value:Variant);
+procedure TFIBCustomDataSet.SetArrayValue(Field: TField; Value: Variant);
 var
- qf:TFIBXSQLVAR;
+  qf: TFIBXSQLVAR;
 begin
- if not (State in [dsEdit,dsInsert]) then
-  Exit;
- if not Assigned(Field) then
-  Exit;
- if VarIsEmpty( Value ) or VarIsNull( Value ) then
- begin
-   Field.Clear;              
-   Exit;
- end;
- qf:=QSelect[Field.FieldName];
- if qf.FIBArray=nil then
-  Exit;
- AutoStartUpdateTransaction;
- CheckUpdateTransaction;
- qf.FIBArray.SetFieldArrayValue(Value,Field, DBHandle,@UpdateTransaction.Handle)
+  if not (State in [dsEdit, dsInsert]) then
+    Exit;
+
+  if not Assigned(Field) then
+    Exit;
+
+  if VarIsEmpty(Value) or VarIsNull(Value) then
+  begin
+    Field.Clear;
+    Exit;
+  end;
+
+  qf := QSelect[Field.FieldName];
+  if qf.FIBArray = nil then
+    Exit;
+
+  AutoStartUpdateTransaction;
+  CheckUpdateTransaction;
+  qf.FIBArray.SetFieldArrayValue(Value, Field, DBHandle, (UpdateTransaction as IFb25Transaction).GetPHandle)
 end;
 
 function TFIBCustomDataSet.GetElementFromValue( Field:TField;
@@ -11963,7 +11967,7 @@ begin
  if qf.FIBArray=nil then Exit;
  AutoStartUpdateTransaction;
  CheckUpdateTransaction;
- qf.FIBArray.PutElementToField(Field,Value,Indexes,DBHandle,@UpdateTransaction.Handle);
+ qf.FIBArray.PutElementToField(Field,Value,Indexes,DBHandle,(UpdateTransaction as IFb25Transaction).GetPHandle);
 end;
 {$ENDIF}
 
