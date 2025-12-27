@@ -24,7 +24,7 @@ unit IB_InstallHeader;
 
 interface
 
-{$I FIBPlus.inc}
+{$I ..\..\FIBPlus.inc}
 uses
 
 SysUtils, Classes;

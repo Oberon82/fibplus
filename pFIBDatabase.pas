@@ -605,7 +605,7 @@ begin
   Include(FDatabaseRunState,drsInCloseLostConnect);
   try
  // Let's avoid of calls IB Api
-    FHandle:=nil;
+    FAttachment := nil;
     for i := 0 to Pred(FIBBaseCount) do
      try
       if FIBBases[i] <> nil then

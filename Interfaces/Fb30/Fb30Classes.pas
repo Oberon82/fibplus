@@ -17,7 +17,6 @@ type
     function GetTransactionParams: IFbTransactionParams;
     function GetStatus: IFbStatus;
     function GetLibraryFilePath: string;
-    function GetProvider: IFbProvider;
   end;
 
 
@@ -57,11 +56,6 @@ begin
 end;
 
 function TFb30Provider.GetLibraryFilePath: string;
-begin
-
-end;
-
-function TFb30Provider.GetProvider: IFbProvider;
 begin
 
 end;
